@@ -2,7 +2,9 @@ import torch
 import numpy as np
 from abc import ABC, abstractmethod
 
-
+# TODO:
+# 1. Define the dataset class
+# 2. Adjust the loader factory class accordingly
 class LoaderFactory:
     def __init__(self, loader_name: str):
         self.loaders = {

@@ -4,6 +4,9 @@ from typing import Any
 from abc import ABC, abstractmethod
 
 
+# TODO:
+# 1. Double check the loss functions (escpecially the PSF-Constrained ones)
+# 2. Add more loss functions
 class LossFactory:
     """
     Factory class for creating loss functions based on the provided

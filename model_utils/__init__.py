@@ -7,6 +7,9 @@ from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikeliho
 from model_utils.botunning import objective_function, get_next_candidate
 
 
+# TODO: 
+# 1. Define the hyperparameter space
+# 2. Define the objective function
 def hyperparameter_optimization(bounds: torch, num_iterations: int = 10):
     # Draw 5 random samples from the parameter space
     X_init = draw_sobol_samples(bounds=bounds, n=5, q=1).squeeze(1)

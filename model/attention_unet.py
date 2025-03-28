@@ -3,6 +3,9 @@ import torch
 from tqdm import tqdm
 from copy import deepcopy
 
+
+# TODO:
+# 1. Adjust the training loop to match the data loader
 class AttentionUNET(AttentionUnet):
     def __init__(
             self,
