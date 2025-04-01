@@ -5,9 +5,6 @@ from copy import deepcopy
 import wandb
 
 
-import psutil
-import time
-
 run = wandb.init(project="galaxy-agn-detection", name="attention_unet_training")
 
 # TODO:
@@ -69,7 +66,6 @@ class AttentionUNET(AttentionUnet):
         ):
             self.train()
             epoch_loss = 0
-            start_time = time.time()
             for inputs, targets, psf in train_loader:
                 # Move the data to the device
                 inputs = inputs.to(device)
@@ -122,15 +118,11 @@ class AttentionUNET(AttentionUnet):
                 "val_loss": val_loss / len(val_loader)
             })
 
+            if epoch == 25:
+                torch.save(self.state_dict(), "attention_unet_model_euclid_25_epoch.pth")
+
             print(f"Epoch Loss: {epoch_loss / len(train_loader):.4f}, "
                   f"Validation Loss: {val_loss / len(val_loader):.4f}")
-            
-            print(f"Allocated GPU Memory: {torch.cuda.memory_allocated() / 1e6} MB")
-            print(f"Reserved GPU Memory: {torch.cuda.memory_reserved() / 1e6} MB")
-            print(f"CPU Memory Usage: {psutil.virtual_memory().used / 1e6} MB")
-
-            end_time = time.time()
-            print(f"Time for one epoch: {end_time - start_time} seconds")
             
         # Finish WandB run
         wandb.finish()
