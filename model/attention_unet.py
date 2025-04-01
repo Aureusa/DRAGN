@@ -2,7 +2,13 @@ from monai.networks.nets import AttentionUnet
 import torch
 from tqdm import tqdm
 from copy import deepcopy
+import wandb
 
+
+import psutil
+import time
+
+run = wandb.init(project="galaxy-agn-detection", name="attention_unet_training")
 
 # TODO:
 # 1. Adjust the training loop to match the data loader
@@ -56,15 +62,14 @@ class AttentionUNET(AttentionUnet):
         # Define the optimizer
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
 
-        epoch_loss = 1e9
-        val_loss = 1e9
         # Iterate over epochs
-        for _ in tqdm(
+        for epoch in tqdm(
             range(num_epochs),
-            desc=f'Training. Train Loss: {epoch_loss/len(train_loader)}; Val Loss: {val_loss/len(val_loader)}'
+            desc='Training...'
         ):
             self.train()
             epoch_loss = 0
+            start_time = time.time()
             for inputs, targets, psf in train_loader:
                 # Move the data to the device
                 inputs = inputs.to(device)
@@ -109,3 +114,23 @@ class AttentionUNET(AttentionUnet):
             # Save the training and validation loss
             self._train_loss.append(epoch_loss / len(train_loader))
             self._val_loss.append(val_loss / len(val_loader))
+
+            # Log losses to WandB
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": epoch_loss / len(train_loader),
+                "val_loss": val_loss / len(val_loader)
+            })
+
+            print(f"Epoch Loss: {epoch_loss / len(train_loader):.4f}, "
+                  f"Validation Loss: {val_loss / len(val_loader):.4f}")
+            
+            print(f"Allocated GPU Memory: {torch.cuda.memory_allocated() / 1e6} MB")
+            print(f"Reserved GPU Memory: {torch.cuda.memory_reserved() / 1e6} MB")
+            print(f"CPU Memory Usage: {psutil.virtual_memory().used / 1e6} MB")
+
+            end_time = time.time()
+            print(f"Time for one epoch: {end_time - start_time} seconds")
+            
+        # Finish WandB run
+        wandb.finish()

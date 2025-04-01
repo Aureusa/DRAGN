@@ -72,9 +72,11 @@ class GalaxyDataset(Dataset):
             galaxy_agn_free_data = galaxy_agn_free_data.astype(np.float32, copy=False)
 
             # Convert the data to torch tensors
-            galaxy_agn_tensor = torch.tensor(galaxy_agn_data, dtype=torch.float32)
-            galaxy_agn_free_tensor = torch.tensor(galaxy_agn_free_data, dtype=torch.float32)
+            galaxy_agn_tensor = torch.tensor(galaxy_agn_data, dtype=torch.float32).unsqueeze(0)
+            galaxy_agn_free_tensor = torch.tensor(galaxy_agn_free_data, dtype=torch.float32).unsqueeze(0)
             target_diff_image = galaxy_agn_tensor - galaxy_agn_free_tensor
+
+            target_diff_image = target_diff_image.squeeze(0).unsqueeze(0)
 
             return galaxy_agn_tensor, galaxy_agn_free_tensor, target_diff_image
         

@@ -7,41 +7,22 @@ from abc import ABC, abstractmethod
 # TODO:
 # 1. Double check the loss functions (escpecially the PSF-Constrained ones)
 # 2. Add more loss functions
-class LossFactory:
-    """
-    Factory class for creating loss functions based on the provided
-    loss function name.
-    """
-    def __init__(self, loss_name: str) -> None:
-        """
-        Initialize the LossFactory with the provided loss function name.
+def get_loss_function(loss_name: str) -> None:
+    loss_functions = {
+        'PSF-Constrained MSE Loss': PSFConstrainedMSELoss(),
+        'PSF-Constrained Smooth L1 Loss': PSFConstrainedSmoothL1Loss(),
+        'MSE Loss': MSELoss(),
+        'L1 Loss': L1Loss(),
+        'Smooth L1 Loss': SmoothL1Loss(),
+    }
+    
+    if loss_name not in loss_functions:
+        raise ValueError(f"Loss function '{loss_name}' is not recognized.")
+    
+    # Set the loss function based on the provided name
+    loss_func = loss_functions[loss_name]
 
-        :param loss_name: the name of the loss function
-        :type loss_name: str
-        :raises ValueError: if the loss function name is not recognized
-        """
-        self.loss_functions = {
-            'PSF-Constrained MSE Loss': PSFConstrainedMSELoss(),
-            'PSF-Constrained Smooth L1 Loss': PSFConstrainedSmoothL1Loss(),
-            'MSE Loss': MSELoss(),
-            'L1 Loss': L1Loss(),
-            'Smooth L1 Loss': SmoothL1Loss(),
-        }
-        
-        if loss_name not in self.loss_functions:
-            raise ValueError(f"Loss function '{loss_name}' is not recognized.")
-        
-        # Set the loss function based on the provided name
-        self.loss_func = self.loss_functions[loss_name]
-
-    def get_loss(self) -> nn.Module:
-        """
-        Get the loss function based on the provided name.
-
-        :return: the loss function
-        :rtype: nn.Module
-        """
-        return self.loss_func
+    return loss_func
     
     
 class Loss(ABC):
