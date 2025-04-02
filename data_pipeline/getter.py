@@ -17,7 +17,7 @@ with open(db_path, "r") as f:
 
 
 class FilepathGetter:
-    def __init__(self, telescope, redshift: list[str]|None = None) -> None:
+    def __init__(self, telescope, redshift: list[str]|None = None, redshift_treshhold: float|None = None) -> None:
         """
         Initialize the DataGetter class.
         This class is responsible for getting the filenames 
@@ -31,6 +31,12 @@ class FilepathGetter:
         :raises ValueError: If the telescope is not supported or if the redshift
         is not supported for the given telescope.
         """
+        if redshift_treshhold is not None:
+            if redshift is not None:
+                redshift = None
+                info = "`redshift_treshhold` takes priority over `redshift`!\n"
+                info += "All files bellow the treshhold value will be collected."
+                print_box(info)
         if telescope not in TELESCOPES_DB:
             raise ValueError(f"Telescope {telescope} not supported. Choose from {list(TELESCOPES_DB.keys())}.")
         
@@ -44,40 +50,74 @@ class FilepathGetter:
 
         # Validate the redshift
         if redshift is not None:
-            # Create a set of available redshifts for the telescope
-            avaliable_redshifts = set(TELESCOPES_DB[telescope]["redshifts"])
-
-            info = "Retrieving the observations for the following redshift values:"
-            info += "\nsnap - redshift"
-
-            files = []
-            
-            # Loop through the redshift values
-            for redshift_value in redshift:
-                # Check if the provided redshift value is in the available redshifts
-                if redshift not in avaliable_redshifts:
-                    raise ValueError(f"Data for redshift '{redshift}' not supported for telescope '{telescope}'.")
-                info += f"\nsnapnum_{redshift_value} - {TELESCOPES_DB['SNAP-REDSHIFT MAP'][redshift_value]}"
-                # Get the path for the current redshift
-                telecope_source_path = os.path.join(telecope_source_path, f"snapnum_{redshift}")
-
-                # Get all .fits files at the current redshift
-                files_at_curr_redshift = glob.glob(os.path.join(telecope_source_path, "*.fits"))
-
-                # Add the files to the list
-                files.extend(files_at_curr_redshift)
-
-            self.fits_files = files
-
-            info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path} for the given redshifts."
+            info = self._retrieve_files_from_snapnum_list(telescope, redshift, telecope_source_path)
+        elif redshift_treshhold is not None:
+            info = self._retrieve_files_with_z_treshhold(telescope, redshift_treshhold, telecope_source_path)
         else:
-            info = "Retrieving the observations for all redshift values:"
+            info = "Retrieving the observations for all redshift values:\n"
 
             self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
 
             info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path}"
 
         print_box(info)
+
+    def _retrieve_files_with_z_treshhold(self, telescope: str, redshift_treshhold: float, telecope_source_path: str):
+        info = f"Retrieving the observations for redshift smaller than <{redshift_treshhold}:\n"
+        info += "snapnum folder - correspodning redshift\n"
+
+        files = []
+
+        telescope_avaliable_redshifts = set(TELESCOPES_DB[telescope]["redshifts"])
+        for snapnum, z in TELESCOPES_DB["SNAP-REDSHIFT MAP"].items():
+            if snapnum in telescope_avaliable_redshifts and z < redshift_treshhold:
+                snapnum_folders = f"snapnum_{snapnum}"
+                info += f"{snapnum_folders} - {round(z,2)}\n"
+
+                # Get the path for the current redshift
+                telecope_source_path_redshift = os.path.join(telecope_source_path, snapnum_folders)
+
+                # Get all .fits files at the current redshift
+                files_at_curr_redshift = glob.glob(os.path.join(telecope_source_path_redshift, "*.fits"))
+
+                # Add the files to the list
+                files.extend(files_at_curr_redshift)
+        
+        self.fits_files = files
+
+        info += f"Found {len(self.fits_files)} .fits files for redshift smaller than <{redshift_treshhold}."
+
+        return info
+    
+    def _retrieve_files_from_snapnum_list(self, telescope: str, redshift: list[str], telecope_source_path: str):
+        # Create a set of available redshifts for the telescope
+        avaliable_redshifts = set(TELESCOPES_DB[telescope]["redshifts"])
+
+        info = "Retrieving the observations for the following redshift values:\n"
+        info += "snapnum folder - correspodning redshift\n"
+
+        files = []
+        
+        # Loop through the redshift values
+        for redshift_value in redshift:
+            # Check if the provided redshift value is in the available redshifts
+            if redshift_value not in avaliable_redshifts:
+                raise ValueError(f"Data for redshift '{redshift}' not supported for telescope '{telescope}'.")
+            info += f"snapnum_{redshift_value} - {round(TELESCOPES_DB['SNAP-REDSHIFT MAP'][redshift_value],2)}\n"
+            # Get the path for the current redshift
+            telecope_source_path_redshift = os.path.join(telecope_source_path, f"snapnum_{redshift_value}")
+
+            # Get all .fits files at the current redshift
+            files_at_curr_redshift = glob.glob(os.path.join(telecope_source_path_redshift, "*.fits"))
+
+            # Add the files to the list
+            files.extend(files_at_curr_redshift)
+
+        self.fits_files = files
+
+        info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path} for the given redshifts."
+
+        return info
         
     # def __init__(self):
     #     """
