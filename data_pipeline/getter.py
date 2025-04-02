@@ -17,7 +17,7 @@ with open(db_path, "r") as f:
 
 
 class FilepathGetter:
-    def __init__(self, telescope, redshift: list[str]|None = None, redshift_treshhold: float|None = None) -> None:
+    def __init__(self, telescope: str, redshift: list[str]|None = None, redshift_treshhold: float|None = None) -> None:
         """
         Initialize the DataGetter class.
         This class is responsible for getting the filenames 
@@ -25,9 +25,12 @@ class FilepathGetter:
 
         :param telescope: The name of the telescope to get data from.
         :type telescope: str
-        :param redshift: the redshift, defaults to None. If left to default,
-        it will get all the filenames for the telescope.
-        :type redshift: str, optional
+        :param redshift: The list of redshift values to filter the data.
+        :type redshift: list[str], optional
+        :param redshift_treshhold: The redshift threshold to filter the data.
+        Retrieves all files with redshift smaller than the threshold.
+        Takes priority over `redshift`.
+        :type redshift_treshhold: float, optional
         :raises ValueError: If the telescope is not supported or if the redshift
         is not supported for the given telescope.
         """
@@ -43,17 +46,18 @@ class FilepathGetter:
         # Get the data folder from the database
         data_folder = TELESCOPES_DB[telescope]["folder"]
 
+        # Get the path to root folder
         os.chdir("..")
         os.chdir("..")
 
+        # Get the path to the telescope source path
         telecope_source_path = os.path.join(SCRATCH_DIR, "s4683099", data_folder)
 
-        # Validate the redshift
         if redshift is not None:
             info = self._retrieve_files_from_snapnum_list(telescope, redshift, telecope_source_path)
         elif redshift_treshhold is not None:
             info = self._retrieve_files_with_z_treshhold(telescope, redshift_treshhold, telecope_source_path)
-        else:
+        else: # Collect all the files from the telescope source path
             info = "Retrieving the observations for all redshift values:\n"
 
             self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
@@ -62,7 +66,19 @@ class FilepathGetter:
 
         print_box(info)
 
-    def _retrieve_files_with_z_treshhold(self, telescope: str, redshift_treshhold: float, telecope_source_path: str):
+    def _retrieve_files_with_z_treshhold(self, telescope: str, redshift_treshhold: float, telecope_source_path: str) -> str:
+        """
+        Retrieve the files from the telescope source path with redshift smaller than the threshold.
+        
+        :param telescope: The name of the telescope to get data from.
+        :type telescope: str
+        :param redshift_treshhold: The redshift threshold to filter the data.
+        :type redshift_treshhold: float
+        :param telecope_source_path: The path to the telescope source folder.
+        :type telecope_source_path: str
+        :return: A string with the information about the retrieved files.
+        :rtype: str
+        """
         info = f"Retrieving the observations for redshift smaller than <{redshift_treshhold}:\n"
         info += "snapnum folder - correspodning redshift\n"
 
@@ -89,7 +105,22 @@ class FilepathGetter:
 
         return info
     
-    def _retrieve_files_from_snapnum_list(self, telescope: str, redshift: list[str], telecope_source_path: str):
+    def _retrieve_files_from_snapnum_list(self, telescope: str, redshift: list[str], telecope_source_path: str) -> str:
+        """
+        Retrieve the files from the telescope source path for the given redshift values.
+        The redshift values are expected to be in the format: XXX.
+
+        :param telescope: The name of the telescope to get data from.
+        :type telescope: str
+        :param redshift: The list of redshift values to filter the data.
+        :type redshift: list[str]
+        :param telecope_source_path: The path to the telescope source folder.
+        :type telecope_source_path: str
+        :raises ValueError: If the provided redshift value is not in the
+        available redshifts for the telescope.
+        :return: A string with the information about the retrieved files.
+        :rtype: str
+        """
         # Create a set of available redshifts for the telescope
         avaliable_redshifts = set(TELESCOPES_DB[telescope]["redshifts"])
 
@@ -118,16 +149,6 @@ class FilepathGetter:
         info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path} for the given redshifts."
 
         return info
-        
-    # def __init__(self):
-    #     """
-    #     USED FOR TESTING ONLY
-    #     """
-    #     # Define the folder path
-    #     folder_path = "data"
-
-    #     # Get all .fits files
-    #     self.fits_files = glob.glob(os.path.join(folder_path, "*.fits"))
 
     def get_data(self) -> tuple[dict, list]:
         """
