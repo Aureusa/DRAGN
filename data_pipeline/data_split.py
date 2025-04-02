@@ -21,18 +21,22 @@ def create_source_target_pairs(file_groups: dict) -> tuple[list[str], list[str]]
 
     source = []
     target = []
-    for key, files in file_groups.items():
-        if not re.search(pattern_agn_free, files[0]):
-            # if the file does not match the pattern raise an error
-            raise ValueError(
-                f"Key: {key} does not match the pattern {pattern_agn_free}"
-            )
-        
-        for file in files[1:]:
-            source.append(file)
-            target.append(files[0])
+    tot_targets_count = 0
+    tot_sources_count = 0
+    for _, files in file_groups.items():
+        for file in files:
+            if re.search(pattern_agn_free, file):
+                tot_targets_count += 1
+                for i in range(len(files)-1):
+                    target.append(file)
+            else:
+                tot_sources_count += 1
+                source.append(file)
 
-    print_box(f"Number of source-target pairs: {len(source)}")
+    info = f"Number of source-target pairs: {len(source)}-{len(target)}"
+    info += f"\nTotal targets {tot_targets_count} (AGN free)"
+    info += f"\nTotal sources {tot_sources_count} (AGN corrupted)"
+    print_box(info)
 
     return source, target
 
@@ -40,7 +44,7 @@ def create_source_target_pairs(file_groups: dict) -> tuple[list[str], list[str]]
 def test_train_val_split(
         X : list[str],
         y : list[str],
-        test_size=0.2,
+        test_size=0.1,
         val_size=0.1
     ) -> tuple:
     """
@@ -70,10 +74,10 @@ def test_train_val_split(
         X_train_temp, y_train_temp, test_size=adjusted_val_size
     )
 
-    info = f"Training set size: {len(X_train)}\n"
-    info += f"Validation set size: {len(X_val)}\n"
-    info += f"Test set size: {len(X_test)}\n"
-    info += f"Total dataset size: {len(X)}"
+    info = f"Training set size: {len(X_train)} - {len(y_train)}\n"
+    info += f"Validation set size: {len(X_val)} - {len(y_val)}\n"
+    info += f"Test set size: {len(X_test)} - {len(X_test)}\n"
+    info += f"Total dataset size: {len(X)} - {len(y)}"
     print_box(info)
     
     return X_train, X_val, X_test, y_train, y_val, y_test

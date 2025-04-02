@@ -4,8 +4,10 @@ from tqdm import tqdm
 from copy import deepcopy
 import wandb
 
+from utils import print_box
 
-run = wandb.init(project="galaxy-agn-detection", name="attention_unet_training")
+
+run = wandb.init(project="galaxy-agn-detection_mse_only", name="attention_unet_training_mse_only")
 
 # TODO:
 # 1. Adjust the training loop to match the data loader
@@ -51,10 +53,12 @@ class AttentionUNET(AttentionUnet):
     def forward(self, x):
         return super().forward(x)
     
-    def train_model(self, train_loader, val_loader, lr, loss_function, num_epochs):
+    def train_model(self, train_loader, val_loader, lr, loss_function, num_epochs, checkpoint_save_name):
         # Define the device
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.to(device)
+
+        print_box(f"Training on {device}!")
 
         # Define the optimizer
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
@@ -119,7 +123,8 @@ class AttentionUNET(AttentionUnet):
             })
 
             if epoch == 25:
-                torch.save(self.state_dict(), "attention_unet_model_euclid_25_epoch.pth")
+                torch.save(self.state_dict(), f"attention_unet_model_{checkpoint_save_name}_25_epoch.pth")
+                print_box("Model saved successfully at 25 epochs!")
 
             print(f"Epoch Loss: {epoch_loss / len(train_loader):.4f}, "
                   f"Validation Loss: {val_loss / len(val_loader):.4f}")

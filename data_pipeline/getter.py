@@ -8,7 +8,7 @@ from utils import print_box
 
 
 # Define the scratch dir to use in habrok
-SCRATCH_DIR = "scratch"
+SCRATCH_DIR = "/scratch"
 
 # Load the data database
 db_path = os.path.join(os.path.join(os.getcwd(), "data_pipeline"), "data_db.json")
@@ -17,51 +17,54 @@ with open(db_path, "r") as f:
 
 
 class FilepathGetter:
-    # def __init__(self, telescope, redshift=None) -> None:
-    #     """
-    #     Initialize the DataGetter class.
-    #     This class is responsible for getting the filenames 
-    #     from the telescope source path and grouping them by (snXXX, unique_id).
+    def __init__(self, telescope, redshift=None) -> None:
+        """
+        Initialize the DataGetter class.
+        This class is responsible for getting the filenames 
+        from the telescope source path and grouping them by (snXXX, unique_id).
 
-    #     :param telescope: The name of the telescope to get data from.
-    #     :type telescope: str
-    #     :param redshift: the redshift, defaults to None. If left to default,
-    #     it will get all the filenames for the telescope.
-    #     :type redshift: str, optional
-    #     :raises ValueError: If the telescope is not supported or if the redshift
-    #     is not supported for the given telescope.
-    #     """
-    #     if telescope not in TELESCOPES_DB:
-    #         raise ValueError(f"Telescope {telescope} not supported. Choose from {list(TELESCOPES_DB.keys())}.")
+        :param telescope: The name of the telescope to get data from.
+        :type telescope: str
+        :param redshift: the redshift, defaults to None. If left to default,
+        it will get all the filenames for the telescope.
+        :type redshift: str, optional
+        :raises ValueError: If the telescope is not supported or if the redshift
+        is not supported for the given telescope.
+        """
+        if telescope not in TELESCOPES_DB:
+            raise ValueError(f"Telescope {telescope} not supported. Choose from {list(TELESCOPES_DB.keys())}.")
         
-    #     # Get the data folder from the database
-    #     data_folder = TELESCOPES_DB[telescope]["folder"]
+        # Get the data folder from the database
+        data_folder = TELESCOPES_DB[telescope]["folder"]
 
-    #     telecope_source_path = os.path.join(os.path.expanduser("~"), SCRATCH_DIR, data_folder)
+        os.chdir("..")
+        os.chdir("..")
 
-    #     # Validate the redshift
-    #     if redshift is not None:
-    #         if redshift not in TELESCOPES_DB[telescope]["redshifts"]:
-    #             raise ValueError(f"Data for redshift '{redshift}' not supported for telescope '{telescope}'.")
+        telecope_source_path = os.path.join(SCRATCH_DIR, "s4683099", data_folder)
+
+        # Validate the redshift
+        if redshift is not None:
+            if redshift not in TELESCOPES_DB[telescope]["redshifts"]:
+                raise ValueError(f"Data for redshift '{redshift}' not supported for telescope '{telescope}'.")
             
-    #         telecope_source_path = os.path.join(telecope_source_path, f"snapnum_{redshift}")
+            telecope_source_path = os.path.join(telecope_source_path, f"snapnum_{redshift}")
 
-    #         # Get all .fits files
-    #         self.fits_files = glob.glob(os.path.join(telecope_source_path, "*.fits"))
-    #     else:
-    #         self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
+            # Get all .fits files
+            self.fits_files = glob.glob(os.path.join(telecope_source_path, "*.fits"))
+        else:
+            self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
 
-    #     print_box(f"Found {len(self.fits_files)} .fits files in {telecope_source_path}")
+        print_box(f"Found {len(self.fits_files)} .fits files in {telecope_source_path}")
 
-    def __init__(self):
-        """
-        USED FOR TESTING ONLY
-        """
-        # Define the folder path
-        folder_path = "data"
+    # def __init__(self):
+    #     """
+    #     USED FOR TESTING ONLY
+    #     """
+    #     # Define the folder path
+    #     folder_path = "data"
 
-        # Get all .fits files
-        self.fits_files = glob.glob(os.path.join(folder_path, "*.fits"))
+    #     # Get all .fits files
+    #     self.fits_files = glob.glob(os.path.join(folder_path, "*.fits"))
 
     def get_data(self, stop: int = 10) -> tuple[dict, list]:
         """
@@ -79,8 +82,8 @@ class FilepathGetter:
         file_groups = defaultdict(list)
 
         # Regular expression to extract identifiers
-        pattern_agn = re.compile(rf"{TELESCOPES_DB["AGN_CONTAMINATION_PATTERN"]}")
-        pattern_agn_free = re.compile(rf"{TELESCOPES_DB["AGN_FREE_PATERN"]}")
+        pattern_agn = re.compile(rf"{TELESCOPES_DB['AGN_CONTAMINATION_PATTERN']}")
+        pattern_agn_free = re.compile(rf"{TELESCOPES_DB['AGN_FREE_PATERN']}")
         
         # Set to store unique keys
         all_keys = set()
