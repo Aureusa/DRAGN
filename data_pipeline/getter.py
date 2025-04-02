@@ -17,7 +17,7 @@ with open(db_path, "r") as f:
 
 
 class FilepathGetter:
-    def __init__(self, telescope, redshift=None) -> None:
+    def __init__(self, telescope, redshift: list[str]|None = None) -> None:
         """
         Initialize the DataGetter class.
         This class is responsible for getting the filenames 
@@ -44,18 +44,41 @@ class FilepathGetter:
 
         # Validate the redshift
         if redshift is not None:
-            if redshift not in TELESCOPES_DB[telescope]["redshifts"]:
-                raise ValueError(f"Data for redshift '{redshift}' not supported for telescope '{telescope}'.")
-            
-            telecope_source_path = os.path.join(telecope_source_path, f"snapnum_{redshift}")
+            # Create a set of available redshifts for the telescope
+            avaliable_redshifts = set(TELESCOPES_DB[telescope]["redshifts"])
 
-            # Get all .fits files
-            self.fits_files = glob.glob(os.path.join(telecope_source_path, "*.fits"))
+            info = "Retrieving the observations for the following redshift values:"
+            info += "\nsnap - redshift"
+
+            files = []
+            
+            # Loop through the redshift values
+            for redshift_value in redshift:
+                # Check if the provided redshift value is in the available redshifts
+                if redshift not in avaliable_redshifts:
+                    raise ValueError(f"Data for redshift '{redshift}' not supported for telescope '{telescope}'.")
+                info += f"\nsnapnum_{redshift_value} - {TELESCOPES_DB['SNAP-REDSHIFT MAP'][redshift_value]}"
+                # Get the path for the current redshift
+                telecope_source_path = os.path.join(telecope_source_path, f"snapnum_{redshift}")
+
+                # Get all .fits files at the current redshift
+                files_at_curr_redshift = glob.glob(os.path.join(telecope_source_path, "*.fits"))
+
+                # Add the files to the list
+                files.extend(files_at_curr_redshift)
+
+            self.fits_files = files
+
+            info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path} for the given redshifts."
         else:
+            info = "Retrieving the observations for all redshift values:"
+
             self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
 
-        print_box(f"Found {len(self.fits_files)} .fits files in {telecope_source_path}")
+            info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path}"
 
+        print_box(info)
+        
     # def __init__(self):
     #     """
     #     USED FOR TESTING ONLY
@@ -66,7 +89,7 @@ class FilepathGetter:
     #     # Get all .fits files
     #     self.fits_files = glob.glob(os.path.join(folder_path, "*.fits"))
 
-    def get_data(self, stop: int = 10) -> tuple[dict, list]:
+    def get_data(self) -> tuple[dict, list]:
         """
         Get the data from the telescope source path and group them by (snXXX, unique_id).
         The files are grouped by the identifiers in the filename, which are expected to be in the format:
@@ -88,7 +111,6 @@ class FilepathGetter:
         # Set to store unique keys
         all_keys = set()
 
-        count = 0
         # Process each file
         for file in self.fits_files:
             match_agn = pattern_agn.search(file)
@@ -105,11 +127,6 @@ class FilepathGetter:
                 key = (sn_number, unique_id)
                 all_keys.add(key)
                 file_groups[key].append(file)
-
-            # # JUST FOR TESTING
-            # count += 1
-            # if count >= stop:
-            #     break
 
         print_box(f"Found {len(file_groups)} unique (snXXX, unique_id) pairs.")
 
