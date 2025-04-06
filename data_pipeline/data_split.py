@@ -24,14 +24,15 @@ def create_source_target_pairs(file_groups: dict) -> tuple[list[str], list[str]]
     tot_targets_count = 0
     tot_sources_count = 0
     for _, files in file_groups.items():
-        for file in files:
-            if re.search(pattern_agn_free, file):
-                tot_targets_count += 1
-                for i in range(len(files)-1):
-                    target.append(file)
-            else:
-                tot_sources_count += 1
-                source.append(file)
+        if any(re.search(pattern_agn_free, f) for f in files):
+            for file in files:
+                if re.search(pattern_agn_free, file):
+                    tot_targets_count += 1
+                    for i in range(len(files)-1):
+                        target.append(file)
+                else:
+                    tot_sources_count += 1
+                    source.append(file)
 
     info = f"Number of source-target pairs: {len(source)}-{len(target)}"
     info += f"\nTotal targets {tot_targets_count} (AGN free)"

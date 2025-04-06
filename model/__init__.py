@@ -8,34 +8,44 @@ import os
 from utils import print_box
 import matplotlib.pyplot as plt
 import re
+from matplotlib.colors import Normalize
 
 
 def train_AttentionUNET_model(telescope: str, loss: str, loss_name: str):
     # Initialize the DataGetter class
-    data_getter = FilepathGetter(telescope)
+    # data_getter = FilepathGetter(telescope)
     
-    files, _ = data_getter.get_data()
+    # files, _ = data_getter.get_data()
 
-    source, target = create_source_target_pairs(files)
+    # source, target = create_source_target_pairs(files)
     
-    info = "Sanity check 1"
-    info += f"\nSource: {source[0]}"
-    info += f"\nTarget: {target[0]}"
-    print_box(info)
+    # info = "Sanity check 1"
+    # info += f"\nSource: {source[0]}"
+    # info += f"\nTarget: {target[0]}"
+    # print_box(info)
 
-    info = "Sanity check 2"
-    info = f"\nSource: {source[23452]}"
-    info += f"\nTarget: {target[23452]}"
-    print_box(info)
+    # info = "Sanity check 2"
+    # info = f"\nSource: {source[23452]}"
+    # info += f"\nTarget: {target[23452]}"
+    # print_box(info)
 
-    info = "Sanity check 3"
-    info += f"\nSource: {source[23152]}"
-    info += f"\nTarget: {target[23152]}"
-    print_box(info)
+    # info = "Sanity check 3"
+    # info += f"\nSource: {source[23152]}"
+    # info += f"\nTarget: {target[23152]}"
+    # print_box(info)
 
-    X_train, X_val, X_test, y_train, y_val, y_test = test_train_val_split(
-        source, target, test_size=0.2, val_size=0.1
-    )
+    # X_train, X_val, X_test, y_train, y_val, y_test = test_train_val_split(
+    #     source, target, test_size=0.2, val_size=0.1
+    # )
+
+    with open(os.path.join("data", "mse_constr_euclid", "train_data_mse_constr_euclid.pkl"), "rb") as f:
+        X_train, y_train = pickle.load(f)
+
+    with open(os.path.join("data", "mse_constr_euclid", "val_data_mse_constr_euclid.pkl"), "rb") as f:
+        X_val, y_val = pickle.load(f)
+
+    with open(os.path.join("data", "mse_constr_euclid", "test_data_mse_constr_euclid.pkl"), "rb") as f:
+        X_test, y_test = pickle.load(f)
     
     train_dataset = GalaxyDataset(X_train, y_train)
     val_dataset = GalaxyDataset(X_val, y_val)
@@ -49,16 +59,35 @@ def train_AttentionUNET_model(telescope: str, loss: str, loss_name: str):
     os.chdir(os.path.join(os.getcwd(), "Deep-AGN-Clean"))
 
     # Save the dataset (X_train, y_train, etc.) instead of the DataLoader
-    with open(os.path.join("data", f"train_data_{loss}.pkl"), "wb") as train_file:
+    train_data_path = os.path.join("data", loss, f"train_data_{loss}.pkl")
+    train_dir = os.path.dirname(train_data_path)
+
+    if not os.path.exists(train_dir):
+        os.makedirs(train_dir)
+    with open(train_data_path, "wb") as train_file:
         pickle.dump((X_train, y_train), train_file)
 
-    with open(os.path.join("data", f"val_data_{loss}.pkl"), "wb") as val_file:
+    val_data_path = os.path.join("data", loss, f"val_data_{loss}.pkl")
+    val_dir = os.path.dirname(val_data_path)
+
+    if not os.path.exists(val_dir):
+        os.makedirs(val_dir)
+    with open(val_data_path, "wb") as val_file:
         pickle.dump((X_val, y_val), val_file)
 
-    with open(os.path.join("data", f"test_data_{loss}.pkl"), "wb") as test_file:
+    test_data_path = os.path.join("data", loss, f"test_data_{loss}.pkl")
+    test_dir = os.path.dirname(test_data_path)
+
+    if not os.path.exists(test_dir):
+        os.makedirs(test_dir)
+    with open(test_data_path, "wb") as test_file:
         pickle.dump((X_test, y_test), test_file)
 
-    info = "Train-Val-Test data failpaths saved successfully in `data`"
+    info = "Train-Val-Test data failpaths saved successfully!\n"
+    info += "The paths are:\n"
+    info += f"Training data path: {train_data_path}\n"
+    info += f"Validation data path: {val_data_path}\n"
+    info += f"Testing data path: {test_data_path}"
     print_box(info)
 
     info = f"Ready for training! Current working path is: {os.getcwd()}"
@@ -83,16 +112,18 @@ def train_AttentionUNET_model(telescope: str, loss: str, loss_name: str):
     train_loss = model.train_loss
     val_loss = model.val_loss
 
-    with open(os.path.join("data", f"train_loss_{loss}.pkl"), "wb") as test_file:
+    train_loss_path = os.path.join("data", loss, f"train_loss_{loss}.pkl")
+    with open(train_loss_path, "wb") as test_file:
         pickle.dump(train_loss, test_file)
 
-    info = "Training Loss saved successfully!"
+    info = f"Training Loss saved successfully in `{train_loss_path}`!"
     print_box(info)
 
-    with open(os.path.join("data", f"val_loss_{loss}.pkl"), "wb") as val_file:
+    val_loss_path = os.path.join("data", loss, f"val_loss_{loss}.pkl")
+    with open(val_loss_path, "wb") as val_file:
         pickle.dump(val_loss, val_file)
 
-    info = "Validation Loss saved successfully!"
+    info = f"Validation Loss saved successfully in `{val_loss_path}`!"
     print_box(info)
 
 
@@ -107,7 +138,7 @@ def test_AttentionUNET_model(name: str):
     model.load_state_dict(torch.load(f"{name}.pth", map_location=device))
 
     # Load testing data
-    with open(os.path.join("data", "test_data.pkl"), "rb") as f:
+    with open(os.path.join("data", "mse_constr_euclid", "test_data_mse_constr_euclid.pkl"), "rb") as f:
         X_test, y_test = pickle.load(f)
 
     print_box(f"Whole test corpus:\nX: {len(X_test)}\nY:{len(y_test)}")
@@ -115,7 +146,7 @@ def test_AttentionUNET_model(name: str):
     x_sn = []
     y_sn = []
 
-    pattern = "_sn050_"
+    pattern = "_sn067_"
     for idx, dat in enumerate(X_test):
         if re.search(pattern, dat):
             x_sn.append(dat)
@@ -131,6 +162,7 @@ def test_AttentionUNET_model(name: str):
 
     count = 0
     # Plot test image and prediction
+    # Plot test image and prediction
     for inputs, targets, psf in test_loader:
         inputs = inputs.to(device)
 
@@ -142,12 +174,6 @@ def test_AttentionUNET_model(name: str):
         source = inputs[0][0].cpu().detach().numpy()
         target = targets[0][0].cpu().detach().numpy()
         psf = psf[0][0].cpu().detach().numpy()
-
-        # print_box(f"Input Image Shape: {source.shape} of type {type(source)}")
-        # print_box(f"Target Image Shape: {target.shape} of type {type(target)}")
-        # print_box(f"PSF Image Shape: {psf.shape} of type {type(psf)}")
-        # print_box(f"Cleaned Image Shape: {cleaned_image.shape} of type {type(cleaned_image)}")
-        # print_box(f"Diff Predicted Shape: {diff_predicted.shape} of type {type(diff_predicted)}")
 
         # Make plot
         fig, ax = plt.subplots(1, 5, figsize=(15, 5))
