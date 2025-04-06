@@ -77,6 +77,9 @@ class PSFConstrainedSmoothL1Loss(nn.Module, Loss):
         super(PSFConstrainedSmoothL1Loss, self).__init__()
         self._loss_func = nn.SmoothL1Loss()
 
+    def __str__(self):
+        return "PSF-Constrained Smooth L1 Loss"
+
     def forward(self, x, y_pred, y_true, psf):
         # Calculate the difference between the predicted and true images
         diff = x - y_pred
@@ -95,6 +98,9 @@ class MSELoss(nn.Module, Loss):
         super(MSELoss, self).__init__()
         self._loss_func = nn.MSELoss()
 
+    def __str__(self):
+        return "MSE Loss"
+
     def forward(self, x, y_pred, y_true, psf):
         return self._loss_func(y_pred, y_true)
     
@@ -104,6 +110,9 @@ class L1Loss(nn.Module, Loss):
         super(L1Loss, self).__init__()
         self._loss_func = nn.L1Loss()
 
+    def __str__(self):
+        return "L1 Loss"
+
     def forward(self, x, y_pred, y_true, psf):
         return self._loss_func(y_pred, y_true)
     
@@ -112,6 +121,9 @@ class SmoothL1Loss(nn.Module, Loss):
     def __init__(self):
         super(SmoothL1Loss, self).__init__()
         self._loss_func = nn.SmoothL1Loss()
+
+    def __str__(self):
+        return "Smooth L1 Loss"
 
     def forward(self, x, y_pred, y_true, psf):
         return self._loss_func(y_pred, y_true)

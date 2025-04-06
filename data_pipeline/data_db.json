@@ -9,6 +9,7 @@
     },
     "AGN_FREE_PATERN": "_sn(\\d+)_.*?_(\\d+).fits",
     "AGN_CONTAMINATION_PATTERN": "sn(\\d+)_.*?_(\\d+)_",
+    "AGN FRACTION PATTERN": "_f(.*?)\\.fits",
     "SNAP-REDSHIFT MAP": {
         "002": 12.0,
         "003": 11.0,
