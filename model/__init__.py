@@ -11,7 +11,7 @@ import re
 from matplotlib.colors import Normalize
 
 
-def train_AttentionUNET_model(telescope: str, loss: str, loss_name: str):
+def train_AttentionUNET_model(telescope: str, loss: str, loss_name: str, batch_size: int = 32, num_workers: int = 8):
     # Initialize the DataGetter class
     # data_getter = FilepathGetter(telescope)
     
@@ -51,8 +51,8 @@ def train_AttentionUNET_model(telescope: str, loss: str, loss_name: str):
     val_dataset = GalaxyDataset(X_val, y_val)
 
     # Create DataLoaders
-    train_loader = DataLoader(dataset=train_dataset, batch_size=32, shuffle=True, num_workers=8)
-    val_loader = DataLoader(dataset=val_dataset, batch_size=32, shuffle=True, num_workers=8)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
     # Rebase to the current dir
     os.chdir(os.path.expanduser("~"))

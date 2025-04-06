@@ -6,7 +6,6 @@ from torch.utils.data import Dataset
 from astropy.io import fits
 
 from data_pipeline.getter import TELESCOPES_DB
-from utils import print_box
 
 
 class GalaxyDataset(Dataset):
@@ -64,14 +63,9 @@ class GalaxyDataset(Dataset):
             with fits.open(galaxy_agn_free_filepath) as hdul:
                 galaxy_agn_free_data = hdul[0].data
 
-            print_box(f"AGN-Free image is of shape: {galaxy_agn_free_data.shape}")
-            print_box(f"AGN-Contam image is of shape: {galaxy_agn_data.shape}")
-
-
             # Convert to 2D arrays if the AGN free image is 3D
             if len(galaxy_agn_free_data.shape) == 3:
                 galaxy_agn_free_data = galaxy_agn_free_data[0]
-                print_box(f"AGN-Free reshaped to: {galaxy_agn_free_data.shape}")
 
             # Convert the data to native-endian format before creating a tensor
             galaxy_agn_data = galaxy_agn_data.astype(np.float32, copy=False)

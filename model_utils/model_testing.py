@@ -11,10 +11,15 @@ import os
 from utils import print_box
 import matplotlib.pyplot as plt
 import re
+from tqdm import tqdm
+
+
+
+MODELS_FOLDER = os.path.join("data", "saved_models")
 
 
 class ModelTester:
-    def __init__(self, model_type: str, model_name: str, data_folder: str, *args, **kwargs):
+    def __init__(self, model_type: str, model_name: str, data_folder: str, loss_tail_name: str, *args, **kwargs):
         self._model_name = model_name
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -30,15 +35,15 @@ class ModelTester:
         self._model = models[model_type](*args, **kwargs)
 
         try:
-            self._model.load_state_dict(torch.load(f"{model_name}.pth"))
+            self._model.load_state_dict(torch.load(os.path.join(MODELS_FOLDER, f"{model_name}.pth"), map_location=self._device))
             
-            with open(os.path.join("data", data_folder, "test_data.pkl"), "rb") as file:
+            with open(os.path.join("data", data_folder, f"test_data{loss_tail_name}.pkl"), "rb") as file:
                 self._test_data_X, self._test_data_Y = pickle.load(file)
 
-            with open(os.path.join("data", data_folder, "train_loss.pkl"), "rb") as file:
+            with open(os.path.join("data", data_folder, f"train_loss{loss_tail_name}.pkl"), "rb") as file:
                 self._train_loss = pickle.load(file)
 
-            with open(os.path.join("data", data_folder, "val_loss.pkl"), "rb") as file:
+            with open(os.path.join("data", data_folder, f"val_loss{loss_tail_name}.pkl"), "rb") as file:
                 self._val_loss = pickle.load(file)
 
             info = "Model Tester initialized.\n"
@@ -126,7 +131,7 @@ class ModelTester:
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
         plt.legend()
-        plt.show()
+        plt.savefig(f"{self._model_name}_loss.png")
 
     def clean_n_images(self, n: int) -> None:
         # Create test dataset and dataloader
@@ -142,7 +147,7 @@ class ModelTester:
 
             count = 0
             # Plot test image and prediction
-            for inputs, targets, psf in test_loader:
+            for inputs, targets, psf in tqdm(test_loader, desc="Evaluating"):
                 inputs = inputs.to(self._device)
 
                 cleaned_image = self._model(inputs)
