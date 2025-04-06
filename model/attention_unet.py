@@ -7,8 +7,6 @@ import wandb
 from utils import print_box
 
 
-run = wandb.init(project="galaxy-agn-detection_mse_only", name="attention_unet_training_mse_only")
-
 # TODO:
 # 1. Adjust the training loop to match the data loader
 class AttentionUNET(AttentionUnet):
@@ -54,6 +52,7 @@ class AttentionUNET(AttentionUnet):
         return super().forward(x)
     
     def train_model(self, train_loader, val_loader, lr, loss_function, num_epochs, checkpoint_save_name):
+        run = wandb.init(project=checkpoint_save_name, name=checkpoint_save_name)
         # Define the device
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.to(device)
@@ -117,7 +116,6 @@ class AttentionUNET(AttentionUnet):
 
             # Log losses to WandB
             wandb.log({
-                "epoch": epoch + 1,
                 "train_loss": epoch_loss / len(train_loader),
                 "val_loss": val_loss / len(val_loader)
             })
