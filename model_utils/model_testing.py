@@ -137,10 +137,13 @@ class ModelTester:
         plt.legend()
         plt.savefig(f"{self._model_name}_loss.png")
 
-    def clean_n_images(self, n: int) -> None:
-        # Create test dataset and dataloader
-        test_dataset = GalaxyDataset(self._test_data_X, self._test_data_Y)
-        test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
+    def clean_n_images(self, n: int, test_set: bool = True) -> None:
+        if test_set:
+            dataset = GalaxyDataset(self._test_data_X, self._test_data_Y)
+        else:
+            dataset = GalaxyDataset(self._train_data_X, self._train_data_Y)
+        
+        test_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
 
         self._model.to(self._device)
 
