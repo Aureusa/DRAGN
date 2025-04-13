@@ -83,3 +83,4 @@ class DataAnalysisEngine:
         plt.axis('equal')
         plt.title("AGN Fraction Distribution")
         plt.show()
+        

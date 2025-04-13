@@ -12,6 +12,7 @@ from utils import print_box
 import matplotlib.pyplot as plt
 import re
 from tqdm import tqdm
+from astropy.visualization import AsinhStretch, ImageNormalize
 
 
 
@@ -19,7 +20,7 @@ MODELS_FOLDER = os.path.join("data", "saved_models")
 
 
 class ModelTester:
-    def __init__(self, model_type: str, model_name: str, data_folder: str, loss_tail_name: str, *args, **kwargs):
+    def __init__(self, model_type: str, model_name: str, data_folder: str, *args, **kwargs):
         self._model_name = model_name
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -37,13 +38,16 @@ class ModelTester:
         try:
             self._model.load_state_dict(torch.load(os.path.join(MODELS_FOLDER, f"{model_name}.pth"), map_location=self._device))
             
-            with open(os.path.join("data", data_folder, f"test_data{loss_tail_name}.pkl"), "rb") as file:
+            with open(os.path.join("data", data_folder, f"test_data.pkl"), "rb") as file:
                 self._test_data_X, self._test_data_Y = pickle.load(file)
 
-            with open(os.path.join("data", data_folder, f"train_loss{loss_tail_name}.pkl"), "rb") as file:
-                self._train_loss = pickle.load(file)
+            with open(os.path.join("data", data_folder, f"train_data.pkl"), "rb") as file:
+                self._train_data_X, self._train_data_Y = pickle.load(file)
 
-            with open(os.path.join("data", data_folder, f"val_loss{loss_tail_name}.pkl"), "rb") as file:
+            # with open(os.path.join("data", data_folder, f"train_loss.pkl"), "rb") as file:
+            #     self._train_loss = pickle.load(file)
+
+            with open(os.path.join("data", data_folder, f"val_loss.pkl"), "rb") as file:
                 self._val_loss = pickle.load(file)
 
             info = "Model Tester initialized.\n"
@@ -159,25 +163,32 @@ class ModelTester:
                 target = targets[0][0].cpu().detach().numpy()
                 psf = psf[0][0].cpu().detach().numpy()
 
+                # Normalize the images
+                norm_source = ImageNormalize(source, stretch=AsinhStretch())
+                norm_target = ImageNormalize(target, stretch=AsinhStretch())
+                norm_cleaned_image = ImageNormalize(cleaned_image, stretch=AsinhStretch())
+                norm_diff_predicted = ImageNormalize(diff_predicted, stretch=AsinhStretch())
+                norm_psf = ImageNormalize(psf, stretch=AsinhStretch())
+
                 # Make plot
                 fig, ax = plt.subplots(1, 5, figsize=(15, 5))
-                im0 = ax[0].imshow(source, cmap="gray")
+                im0 = ax[0].imshow(source, norm=norm_source, cmap="gray")
                 ax[0].set_title("Input Image")
                 fig.colorbar(im0, ax=ax[0])
 
-                im1 = ax[1].imshow(target, cmap="gray")
+                im1 = ax[1].imshow(target, norm=norm_target, cmap="gray")
                 ax[1].set_title("Target Image")
                 fig.colorbar(im1, ax=ax[1])
 
-                im2 = ax[2].imshow(cleaned_image, cmap="gray")
+                im2 = ax[2].imshow(cleaned_image, norm=norm_cleaned_image, cmap="gray")
                 ax[2].set_title("Cleaned Image")
                 fig.colorbar(im2, ax=ax[2])
 
-                im3 = ax[3].imshow(diff_predicted, cmap="gray")
+                im3 = ax[3].imshow(diff_predicted, norm=norm_diff_predicted, cmap="gray")
                 ax[3].set_title("Difference Image")
                 fig.colorbar(im3, ax=ax[3])
 
-                im4 = ax[4].imshow(psf, cmap="gray")
+                im4 = ax[4].imshow(psf, norm=norm_psf, cmap="gray")
                 ax[4].set_title("PSF Image")
                 fig.colorbar(im4, ax=ax[4])
 

@@ -64,6 +64,10 @@ class FilepathGetter:
 
             info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path}"
 
+        # Rebase to the current dir
+        os.chdir(os.path.expanduser("~"))
+        os.chdir(os.path.join(os.getcwd(), "Deep-AGN-Clean"))
+
         print_box(info)
 
     def _retrieve_files_with_z_treshhold(self, telescope: str, redshift_treshhold: float, telecope_source_path: str) -> str:

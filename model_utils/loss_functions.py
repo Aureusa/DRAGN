@@ -3,18 +3,11 @@ import torch.nn as nn
 from typing import Any
 from abc import ABC, abstractmethod
 
-
 # TODO:
 # 1. Double check the loss functions (escpecially the PSF-Constrained ones)
 # 2. Add more loss functions
 def get_loss_function(loss_name: str) -> None:
-    loss_functions = {
-        'PSF-Constrained MSE Loss': PSFConstrainedMSELoss(),
-        'PSF-Constrained Smooth L1 Loss': PSFConstrainedSmoothL1Loss(),
-        'MSE Loss': MSELoss(),
-        'L1 Loss': L1Loss(),
-        'Smooth L1 Loss': SmoothL1Loss(),
-    }
+    loss_functions = _get_avaliable_loss_funcstions()
     
     if loss_name not in loss_functions:
         raise ValueError(f"Loss function '{loss_name}' is not recognized.")
@@ -23,7 +16,20 @@ def get_loss_function(loss_name: str) -> None:
     loss_func = loss_functions[loss_name]
 
     return loss_func
-    
+
+
+# LAST UPDATE: 2025-13-04
+# Make sure to update this once new loss functions are added
+def _get_avaliable_loss_funcstions() -> dict:
+    loss_functions = {
+        'PSF-Constrained MSE Loss': PSFConstrainedMSELoss(),
+        'PSF-Constrained Smooth L1 Loss': PSFConstrainedSmoothL1Loss(),
+        'MSE Loss': MSELoss(),
+        'L1 Loss': L1Loss(),
+        'Smooth L1 Loss': SmoothL1Loss(),
+    }
+    return loss_functions
+
     
 class Loss(ABC):
     """
