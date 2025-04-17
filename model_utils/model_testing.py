@@ -36,7 +36,7 @@ class ModelTester:
         self._model = models[model_type](*args, **kwargs)
 
         try:
-            self._model.load_state_dict(torch.load(os.path.join(MODELS_FOLDER, f"{model_name}.pth"), map_location=self._device))
+            self._model.load_state_dict(torch.load(os.path.join(MODELS_FOLDER, f"{model_name}.pth"), map_location=self._device), strict=False)
             
             with open(os.path.join("data", data_folder, f"test_data.pkl"), "rb") as file:
                 self._test_data_X, self._test_data_Y = pickle.load(file)
@@ -143,7 +143,7 @@ class ModelTester:
         else:
             dataset = GalaxyDataset(self._train_data_X, self._train_data_Y)
         
-        test_loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
+        loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
 
         self._model.to(self._device)
 
@@ -154,7 +154,7 @@ class ModelTester:
 
             count = 0
             # Plot test image and prediction
-            for inputs, targets, psf in tqdm(test_loader, desc="Evaluating"):
+            for inputs, targets, psf in tqdm(loader, desc="Evaluating"):
                 inputs = inputs.to(self._device)
 
                 cleaned_image = self._model(inputs)
@@ -167,11 +167,15 @@ class ModelTester:
                 psf = psf[0][0].cpu().detach().numpy()
 
                 # Normalize the images
-                norm_source = ImageNormalize(source, stretch=AsinhStretch())
-                norm_target = ImageNormalize(target, stretch=AsinhStretch())
-                norm_cleaned_image = ImageNormalize(cleaned_image, stretch=AsinhStretch())
-                norm_diff_predicted = ImageNormalize(diff_predicted, stretch=AsinhStretch())
-                norm_psf = ImageNormalize(psf, stretch=AsinhStretch())
+                norm_source = ImageNormalize(target, stretch=AsinhStretch())
+                norm_target = norm_source
+                norm_cleaned_image = norm_source
+                norm_diff_predicted = norm_source
+                norm_psf = norm_source
+                # norm_target = ImageNormalize(target, stretch=AsinhStretch())
+                # norm_cleaned_image = ImageNormalize(cleaned_image, stretch=AsinhStretch())
+                # norm_diff_predicted = ImageNormalize(diff_predicted, stretch=AsinhStretch())
+                # norm_psf = ImageNormalize(psf, stretch=AsinhStretch())
 
                 # Make plot
                 fig, ax = plt.subplots(1, 5, figsize=(15, 5))
@@ -209,8 +213,8 @@ class ModelTester:
         Test the model on the test dataset.
         """
         # Create test dataset and dataloader
-        test_dataset = GalaxyDataset(x_data, y_data)
-        test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
+        dataset = GalaxyDataset(x_data, y_data)
+        loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
 
         # Get the metrics
         metrics = get_metrics(metrics)
@@ -223,7 +227,7 @@ class ModelTester:
         with torch.no_grad():
             print_box("Successfully created test loader!")
 
-            for inputs, targets, psf in test_loader:
+            for inputs, targets, psf in loader:
                 inputs = inputs.to(self._device)
                 targets = targets.to(self._device)
                 psf = psf.to(self._device)

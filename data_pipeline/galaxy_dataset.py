@@ -1,11 +1,7 @@
-import re
-
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 from astropy.io import fits
-
-from data_pipeline.getter import TELESCOPES_DB
 
 
 class GalaxyDataset(Dataset):

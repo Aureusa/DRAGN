@@ -44,7 +44,10 @@ class ModelTrainer:
         if model_type not in AVALAIBLE_MODELS:
             raise ValueError(f"Model type {model_type} is not available. Choose from {list(AVALAIBLE_MODELS.keys())}.")
         else:
-            self.model = AVALAIBLE_MODELS[model_type]()
+            if telescope == "Euclid" and re.search("GAN", model_type) is not None:
+                self.model = AVALAIBLE_MODELS[model_type](discriminator_in_shape=(2, 40, 40))
+            else:
+                self.model = AVALAIBLE_MODELS[model_type]()
 
         self._model_type = model_type
         self._telescope = telescope
@@ -53,7 +56,7 @@ class ModelTrainer:
 
     def load_data(
             self,
-            folder: str
+            folder: str|None = None,
         ) -> tuple[list[str], list[str], list[str], list[str], list[str], list[str]]:
         """
         Load the data from the given folder.
@@ -63,6 +66,14 @@ class ModelTrainer:
         :return: The training, validation and test data.
         :rtype: tuple[list[str], list[str], list[str], list[str], list[str], list[str]]
         """
+        if folder is None:
+            if self._telescope == "JWST":
+                folder = "jwst_full_data"
+            elif self._telescope == "Euclid":
+                folder = "euclid_full_data"
+            else:
+                raise ValueError(f"Something went wrong while retrieving the data from the basepath for {self._telescope}.")
+        
         with open(os.path.join("data", folder, f"train_data.pkl"), "rb") as f:
             X_train, y_train = pickle.load(f)
 
@@ -71,6 +82,8 @@ class ModelTrainer:
 
         with open(os.path.join("data", folder, f"test_data.pkl"), "rb") as f:
             X_test, y_test = pickle.load(f)
+
+        print_box(f"Successfully loaded data from `{os.path.join('data', folder)}`!")
 
         return X_train, X_val, X_test, y_train, y_val, y_test
     
@@ -117,6 +130,47 @@ class ModelTrainer:
         )
 
         return X_train, X_val, X_test, y_train, y_val, y_test
+    
+
+    def fine_tune_model(
+            self,
+            X_train: list[str],
+            X_val: list[str],
+            X_test: list[str],
+            y_train: list[str],
+            y_val: list[str],
+            y_test: list[str],
+            loss_name: str,
+            batch_size: int = 32,
+            num_workers: int = 8,
+            prefetch_factor: int = 2,
+            lr: float = 0.001,
+            num_epochs: int = 50,
+            checkpoints: list[int] = [25],
+            wandb_project_name: str = "Deep-AGN-Clean",
+            wandb_entity: str = "s4683099",
+            save_datasets: bool = False,
+            **kwargs
+        ):
+        self.model.load_model(**kwargs)
+        self.train_model(
+            X_train,
+            X_val,
+            X_test,
+            y_train,
+            y_val,
+            y_test,
+            loss_name,
+            batch_size,
+            num_workers,
+            prefetch_factor,
+            lr,
+            num_epochs,
+            checkpoints,
+            wandb_project_name,
+            wandb_entity,
+            save_datasets
+        )
 
     def train_model(
             self,
@@ -129,11 +183,13 @@ class ModelTrainer:
             loss_name: str,
             batch_size: int = 32,
             num_workers: int = 8,
+            prefetch_factor: int = 2,
             lr: float = 0.001,
             num_epochs: int = 50,
             checkpoints: list[int] = [25],
             wandb_project_name: str = "Deep-AGN-Clean",
-            wandb_entity: str = "s4683099"
+            wandb_entity: str = "s4683099",
+            save_datasets: bool = False
         ):
         """
         Train the model with the given data.
@@ -173,6 +229,14 @@ class ModelTrainer:
         :param wandb_entity: The wandb entity to be used.
         :type wandb_entity: str
         """
+        # Create the folder to store the data
+        data_path = os.path.join("data", self._data_folder)
+        if not os.path.exists(data_path):
+            os.makedirs(data_path)
+
+        if save_datasets:
+            self._save_datasets(X_train, y_train, X_val, y_val, X_test, y_test, data_path)
+
         # Define the model name
         model_name = f"{self._model_type}_{self._telescope}_{self._loss}"
         model_name = model_name.lower()
@@ -183,19 +247,11 @@ class ModelTrainer:
 
         # Create DataLoaders
         train_loader = DataLoader(
-            dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+            dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, prefetch_factor=prefetch_factor
         )
         val_loader = DataLoader(
-            dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+            dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, prefetch_factor=prefetch_factor
         )
-
-        # Create the folder to store the data
-        data_path = os.path.join("data", self._data_folder)
-        if not os.path.exists(data_path):
-            os.makedirs(data_path)
-
-        # Save the dataset
-        self._save_datasets(X_train, y_train, X_val, y_val, X_test, y_test, data_path)
 
         # Get the loss function
         loss_function = get_loss_function(loss_name)

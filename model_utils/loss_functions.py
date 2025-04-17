@@ -27,6 +27,9 @@ def _get_avaliable_loss_funcstions() -> dict:
         'MSE Loss': MSELoss(),
         'L1 Loss': L1Loss(),
         'Smooth L1 Loss': SmoothL1Loss(),
+        'PSF-MSE Loss': PSFMSELoss(),
+        "Masked PSF-MSE Loss": MaskedPSFMSELoss(),
+        "Weighted PSF-MSE Loss": WeightedPSFMSELoss(),
     }
     return loss_functions
 
@@ -109,6 +112,52 @@ class MSELoss(nn.Module, Loss):
 
     def forward(self, x, y_pred, y_true, psf):
         return self._loss_func(y_pred, y_true)
+    
+
+class PSFMSELoss(nn.Module, Loss):
+    def __init__(self):
+        super(PSFMSELoss, self).__init__()
+        self._loss_func = nn.MSELoss()
+
+    def __str__(self):
+        return "PSF-MSE Loss"
+
+    def forward(self, x, y_pred, y_true, psf):
+        diff = x - y_pred
+        return self._loss_func(diff, psf)
+    
+
+class MaskedPSFMSELoss(nn.Module, Loss):
+    def __init__(self):
+        super(MaskedPSFMSELoss, self).__init__()
+        self._loss_func = nn.MSELoss()
+
+    def __str__(self):
+        return "Masked PSF-MSE Loss"
+
+    def forward(self, x, y_pred, y_true, psf):
+        # Create a mask for the pixels where the PSF is non-zero
+        mask = psf > 0
+
+        # Apply the mask to the difference between the predicted and original images
+        diff = x - y_pred
+        diff = diff[mask]
+        return self._loss_func(diff, psf)
+    
+    
+class WeightedPSFMSELoss(nn.Module, Loss):
+    def __init__(self):
+        super(WeightedPSFMSELoss, self).__init__()
+
+    def __str__(self):
+        return "Weighted PSF-MSE Loss"
+
+    def forward(self, x, y_pred, y_true, psf):
+        # Create weights based on the PSF
+        weights = psf / torch.max(psf)
+
+        diff = x - y_pred
+        return nn.functional.mse_loss(diff, psf, weight=weights)
     
 
 class L1Loss(nn.Module, Loss):

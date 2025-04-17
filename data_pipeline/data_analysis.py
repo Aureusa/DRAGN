@@ -1,6 +1,7 @@
 import re
 from collections import Counter
 import matplotlib.pyplot as plt
+import numpy as np
 
 from data_pipeline.getter import TELESCOPES_DB
 from utils import print_box
@@ -9,6 +10,7 @@ from utils import print_box
 # Regular expression pattern for the AGN fraction
 # This pattern is used to extract the AGN fraction from the data.
 AGN_FRACTION_PATTERN = rf"{TELESCOPES_DB['AGN FRACTION PATTERN']}"
+REDSHIFT_PATTERN = rf"{TELESCOPES_DB['REDSHIFT PATTERN']}"
 
 
 class DataAnalysisEngine:
@@ -16,28 +18,41 @@ class DataAnalysisEngine:
         print_box("Data Analysis Engine")
         print_box("Analysing data...")
 
-        pattern = re.compile(AGN_FRACTION_PATTERN)
+        agn_pattern = re.compile(AGN_FRACTION_PATTERN)
 
-        matches = (f"0.{match.group(1)}" for item in data for match in [pattern.search(item)] if match)
+        agn_matches = (float(f"0.{match.group(1)}") for item in data for match in [agn_pattern.search(item)] if match)
         
         # Count occurrences of each match
-        match_counts = Counter(matches)
+        agn_match_counts = Counter(agn_matches)
 
         # Sort matches by their counts in descending order
-        self.sorted_matches = sorted(match_counts.items(), key=lambda x: x[1], reverse=True)
+        self.agn_sorted_matches = sorted(agn_match_counts.items(), key=lambda x: x[1], reverse=True)
+
+        # Redshift pattern
+        redshift_pattern = re.compile(REDSHIFT_PATTERN)
+
+        # "_sn(\\d{3})_.*?_(\\d+)\\.fits"
+        # Extract redshift values from the data
+        redshift_matches = (TELESCOPES_DB["SNAP-REDSHIFT MAP"][match.group(1)] for item in data for match in [redshift_pattern.search(item)] if match)
+
+        # Count occurrences of each redshift match
+        redshift_match_counts = Counter(redshift_matches)
+
+        # Sort redshift matches by their counts in descending order
+        self.redshift_sorted_matches = sorted(redshift_match_counts.items(), key=lambda x: x[1], reverse=True)
 
         print_box("Data analysis completed.")
 
-    def get_sorted_matches(self) -> list[tuple[str, int]]:
+    def get_agn_sorted_matches(self) -> list[tuple[str, int]]:
         """
         Get the sorted matches from the analysis.
 
         :return: A list of tuples containing the match and its count, sorted by count.
         :rtype: list[tuple[str, int]]
         """
-        return self.sorted_matches
+        return self.agn_sorted_matches
     
-    def get_top_matches(self, n: int) -> list[tuple[str, int]]:
+    def get_top_agn_matches(self, n: int) -> list[tuple[str, int]]:
         """
         Get the top N matches from the analysis.
 
@@ -46,9 +61,9 @@ class DataAnalysisEngine:
         :return: A list of tuples containing the match and its count, sorted by count.
         :rtype: list[tuple[str, int]]
         """
-        return self.sorted_matches[:n]
+        return self.agn_sorted_matches[:n]
     
-    def get_bottom_matches(self, n: int) -> list[tuple[str, int]]:
+    def get_bottom_agn_matches(self, n: int) -> list[tuple[str, int]]:
         """
         Get the bottom N matches from the analysis.
 
@@ -57,23 +72,50 @@ class DataAnalysisEngine:
         :return: A list of tuples containing the match and its count, sorted by count.
         :rtype: list[tuple[str, int]]
         """
-        return self.sorted_matches[-n:]
+        return self.agn_sorted_matches[-n:]
     
-    def plot_histogram(self) -> None:
-        all_matches = self.get_sorted_matches()
+    def plot_agn_histogram(self, num_bins: int = 10, hist_name: str = "AGN_fraction_histogram") -> None:
+        all_matches = self.get_agn_sorted_matches()
         matches, counts = zip(*all_matches)
 
-        plt.bar(matches, counts)
+        # Convert matches to floats for binning
+        matches = np.array(matches, dtype=float)
+
+        # Create bins for the histogram
+        bins = np.linspace(matches.min(), matches.max(), num_bins + 1)
+
+        # Plot the histogram
+        plt.hist(matches, bins=bins, weights=counts, edgecolor="black", alpha=0.7)
         plt.xlabel("AGN Fraction")
         plt.ylabel("Counts")
-        plt.title("All AGN Fractions")
-        plt.xticks(rotation=0, ha='right')  # Rotate and align x-axis labels for better readability
-        plt.gcf().autofmt_xdate()  # Automatically adjust x-axis spacing
+        plt.title("AGN Fraction Histogram")
+        plt.xticks(rotation=45, ha="right")  # Rotate x-axis labels for better readability
         plt.tight_layout()
-        plt.show()
+        plt.savefig(f"{hist_name}.png")
+        plt.close()
+
+    def plot_redshift_histogram(self, num_bins: int = 10, hist_name: str = "Redshift_histogram") -> None:
+        all_matches = self.redshift_sorted_matches
+        matches, counts = zip(*all_matches)
+
+        # Convert matches to floats for binning
+        matches = np.array(matches, dtype=float)
+
+        # Create bins for the histogram
+        bins = np.linspace(matches.min(), matches.max(), num_bins + 1)
+
+        # Plot the histogram
+        plt.hist(matches, bins=bins, weights=counts, edgecolor="black", alpha=0.7)
+        plt.xlabel("Redshift")
+        plt.ylabel("Counts")
+        plt.title("Redshift Histogram")
+        plt.xticks(rotation=45, ha="right")  # Rotate x-axis labels for better readability
+        plt.tight_layout()
+        plt.savefig(f"{hist_name}.png")
+        plt.close()
 
     def make_pi_chart(self) -> None:
-        all_matches = self.get_sorted_matches()
+        all_matches = self.get_agn_sorted_matches()
         matches, counts = zip(*all_matches)
 
         # Highlight the top 5 contributors

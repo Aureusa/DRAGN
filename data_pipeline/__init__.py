@@ -1,3 +1,4 @@
 from data_pipeline.data_split import create_source_target_pairs, test_train_val_split
 from data_pipeline.galaxy_dataset import GalaxyDataset
 from data_pipeline.getter import FilepathGetter
+from data_pipeline.data_analysis import DataAnalysisEngine
