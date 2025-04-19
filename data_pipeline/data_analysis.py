@@ -2,9 +2,12 @@ import re
 from collections import Counter
 import matplotlib.pyplot as plt
 import numpy as np
+from astropy.visualization import AsinhStretch, ImageNormalize
+from astropy.io import fits
 
 from data_pipeline.getter import TELESCOPES_DB
 from utils import print_box
+import random
 
 
 # Regular expression pattern for the AGN fraction
@@ -14,34 +17,35 @@ REDSHIFT_PATTERN = rf"{TELESCOPES_DB['REDSHIFT PATTERN']}"
 
 
 class DataAnalysisEngine:
-    def __init__(self, data: list[str]):
-        print_box("Data Analysis Engine")
-        print_box("Analysing data...")
+    def __init__(self, data: list[str]|None = None):
+        if data is not None:
+            print_box("Data Analysis Engine")
+            print_box("Analysing data...")
 
-        agn_pattern = re.compile(AGN_FRACTION_PATTERN)
+            agn_pattern = re.compile(AGN_FRACTION_PATTERN)
 
-        agn_matches = (float(f"0.{match.group(1)}") for item in data for match in [agn_pattern.search(item)] if match)
-        
-        # Count occurrences of each match
-        agn_match_counts = Counter(agn_matches)
+            agn_matches = (float(f"0.{match.group(1)}") for item in data for match in [agn_pattern.search(item)] if match)
+            
+            # Count occurrences of each match
+            agn_match_counts = Counter(agn_matches)
 
-        # Sort matches by their counts in descending order
-        self.agn_sorted_matches = sorted(agn_match_counts.items(), key=lambda x: x[1], reverse=True)
+            # Sort matches by their counts in descending order
+            self.agn_sorted_matches = sorted(agn_match_counts.items(), key=lambda x: x[1], reverse=True)
 
-        # Redshift pattern
-        redshift_pattern = re.compile(REDSHIFT_PATTERN)
+            # Redshift pattern
+            redshift_pattern = re.compile(REDSHIFT_PATTERN)
 
-        # "_sn(\\d{3})_.*?_(\\d+)\\.fits"
-        # Extract redshift values from the data
-        redshift_matches = (TELESCOPES_DB["SNAP-REDSHIFT MAP"][match.group(1)] for item in data for match in [redshift_pattern.search(item)] if match)
+            # "_sn(\\d{3})_.*?_(\\d+)\\.fits"
+            # Extract redshift values from the data
+            redshift_matches = (TELESCOPES_DB["SNAP-REDSHIFT MAP"][match.group(1)] for item in data for match in [redshift_pattern.search(item)] if match)
 
-        # Count occurrences of each redshift match
-        redshift_match_counts = Counter(redshift_matches)
+            # Count occurrences of each redshift match
+            redshift_match_counts = Counter(redshift_matches)
 
-        # Sort redshift matches by their counts in descending order
-        self.redshift_sorted_matches = sorted(redshift_match_counts.items(), key=lambda x: x[1], reverse=True)
+            # Sort redshift matches by their counts in descending order
+            self.redshift_sorted_matches = sorted(redshift_match_counts.items(), key=lambda x: x[1], reverse=True)
 
-        print_box("Data analysis completed.")
+            print_box("Data analysis completed.")
 
     def get_agn_sorted_matches(self) -> list[tuple[str, int]]:
         """
@@ -126,3 +130,127 @@ class DataAnalysisEngine:
         plt.title("AGN Fraction Distribution")
         plt.show()
         
+    def plot_galaxy_grid(self, file_groups: dict, n: int = 5) -> None:
+        """
+        Plot a grid of AGN and AGN-free images.
+
+        :param file_groups: A dictionary containing the file groups.
+        :type file_groups: dict
+        :param n: The number of rows in the grid.
+        :type n: int
+        """
+        pattern_agn_free = TELESCOPES_DB["AGN_FREE_PATERN"]
+        agn_pattern = re.compile(AGN_FRACTION_PATTERN)
+        redshift_pattern = re.compile(REDSHIFT_PATTERN)
+
+        # Define the number of columns and rows
+        first_key = next(iter(file_groups))
+        first_item = file_groups[first_key]
+        n_cols = len(first_item)
+        n_rows = n
+
+        info = "Plotting AGN and AGN-free images in a grid..."
+        info += f"\nRecieved {len(file_groups)} files."
+        info += f"\nPlotting {n} rows and {n_cols} columns."
+        info += "\nThe first column will be AGN-free images and the rest will be AGN images."
+
+        print_box(info)
+
+        # Plot the images in a grid
+        _, axes = plt.subplots(n_rows, n_cols, figsize=(15, 10))
+        
+        nice_keys_euclid = [('060', '31048'), ('062', '220201'), ('065', '24762'), ('064', '57713'), ('055', '274159')]
+        keys_used = []
+        row = 0
+        while row < n_rows:
+            # Select a random key from the file_groups dictionary
+            random_key = random.choice(list(file_groups.keys()))
+            random_key = random.choice(nice_keys_euclid)
+            if random_key in keys_used:
+                continue
+            keys_used.append(random_key)
+
+            # Get the corresponding files for the random key
+            files = file_groups[random_key]
+
+            agn_free = []
+            agn_contam = []
+            if any(re.search(pattern_agn_free, f) for f in files):
+                for file in files:
+                    if re.search(pattern_agn_free, file):
+                        for i in range(len(files)-1):
+                            agn_free.append(file)
+                    else:
+                        agn_contam.append(file)
+
+            # Load the AGN free image
+            with fits.open(agn_free[0]) as hdul:
+                agn_free_data = hdul[0].data
+
+            # Convert to 2D arrays if the AGN free image is 3D
+            if len(agn_free_data.shape) == 3:
+                agn_free_data = agn_free_data[0]
+
+            # Skip the images if the galaxy is very feint
+            if agn_free_data.std() < 0.25 or agn_free_data.std() > 1.25:
+                    continue
+            
+            info = f"Key: {random_key}"
+
+            norm = ImageNormalize(agn_free_data/agn_free_data.max(), stretch=AsinhStretch(), clip=True)#a=np.median(agn_free_data)
+
+            # Find the redshift value
+            redshift_match = re.search(redshift_pattern, agn_free[0])
+            redshift_value = TELESCOPES_DB["SNAP-REDSHIFT MAP"][redshift_match.group(1)]
+
+            # Add redshift value to the left of the row
+            axes[row, 0].text(
+                -0.25, 0.5, rf"$z = {redshift_value:.2f}$", 
+                color="black", fontsize=12, transform=axes[row, 0].transAxes, 
+                verticalalignment="center", horizontalalignment="right", rotation=90
+            )
+
+            # Plot the AGN-free images
+            axes[row, 0].imshow(agn_free_data, cmap='gray_r', norm=norm)
+            axes[row, 0].text(
+                0.05, 0.95, r"$f_{AGN} = 0$", 
+                color="black", fontsize=12, transform=axes[row, 0].transAxes, 
+                verticalalignment="top", horizontalalignment="left"
+            )
+
+            # Sort the AGN-contaminated files by AGN fraction strength
+            agn_contam = sorted(
+                agn_contam,
+                key=lambda agn: float(f"0.{re.search(agn_pattern, agn).group(1)}") if re.search(agn_pattern, agn) else 0
+            )
+
+            # Plot the AGN images
+            for column, agn in enumerate(agn_contam):
+                with fits.open(agn) as hdul:
+                    agn_data = hdul[0].data
+
+                agn_frac = re.search(agn_pattern, agn)
+                if agn_frac:
+                    agn_frac = float(f"0.{agn_frac.group(1)}")
+
+                    axes[row, column+1].imshow(agn_data, cmap='gray_r', norm=norm)
+                    axes[row, column+1].text(
+                        0.05, 0.95, rf"$f_{{AGN}} = {agn_frac:.2f}$", 
+                        color="black", fontsize=12, transform=axes[row, column+1].transAxes, 
+                        verticalalignment="top", horizontalalignment="left"
+                    )
+
+            info += f"ANG Free image standart deviation: {agn_free_data.std():.2f}"
+            print_box(info)
+            row += 1
+
+        # Remove x and y axis value for all images
+        for ax in axes.flat:
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        info = f"Plotted {n} rows and {n_cols} columns."
+        print_box(info)
+
+        plt.tight_layout()
+        plt.savefig(f"example_galaxies_grid_{n}.png")

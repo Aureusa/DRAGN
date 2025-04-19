@@ -30,6 +30,7 @@ def _get_avaliable_loss_funcstions() -> dict:
         'PSF-MSE Loss': PSFMSELoss(),
         "Masked PSF-MSE Loss": MaskedPSFMSELoss(),
         "Weighted PSF-MSE Loss": WeightedPSFMSELoss(),
+        "Weighted MSE Loss": WeightedMSELoss(),
     }
     return loss_functions
 
@@ -158,6 +159,19 @@ class WeightedPSFMSELoss(nn.Module, Loss):
 
         diff = x - y_pred
         return nn.functional.mse_loss(diff, psf, weight=weights)
+    
+
+class WeightedMSELoss(nn.Module, Loss):
+    def __init__(self):
+        super(WeightedMSELoss, self).__init__()
+
+    def __str__(self):
+        return "Weighted MSE Loss"
+
+    def forward(self, x, y_pred, y_true, psf):
+        # Create weights based on the PSF
+        weights = psf / torch.max(psf)
+        return nn.functional.mse_loss(y_pred, y_true, weight=weights)
     
 
 class L1Loss(nn.Module, Loss):
