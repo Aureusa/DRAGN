@@ -1,7 +1,10 @@
 import re
 from sklearn.model_selection import train_test_split
+import random
+import glob
+from collections import defaultdict
 
-from data_pipeline.getter import TELESCOPES_DB
+from data_pipeline._telescopes_db import TELESCOPES_DB
 from utils import print_box
 
 
@@ -82,3 +85,114 @@ def test_train_val_split(
     print_box(info)
     
     return X_train, X_val, X_test, y_train, y_val, y_test
+
+
+class ForgeData:
+    """
+    Class to handle the data splitting and file grouping for the AGN dataset.
+    """
+    def forge_training_data(self, file_groups: dict): # MAIN FUNCTION
+        """
+        Main function to forge the training data.
+        It retrieves the data, splits it into train, validation, and test sets,
+        and creates source-target pairs.
+        
+        :return: A tuple containing the training, validation, and test sets.
+        :rtype: tuple[list[str], list[str], list[str], list[str], list[str], list[str]]
+        """
+        # Split the data into training, validation, and test sets.
+        train_dict, val_dict, test_dict = self.train_test_val_split(file_groups)
+        
+        # Create source-target pairs for training, validation, and test sets.
+        X_train, y_train = self.create_source_target_pairs(train_dict)
+        X_val, y_val = self.create_source_target_pairs(val_dict)
+        X_test, y_test = self.create_source_target_pairs(test_dict)
+
+        # Info
+        print(f"Train: {len(X_train)}-{len(y_train)}")
+        print(f"Validation: {len(X_val)}-{len(y_val)}")
+        print(f"Test: {len(X_test)}-{len(y_test)}")
+
+        return X_train, y_train, X_val, y_val, X_test, y_test
+        
+    def train_test_val_split(
+            self,
+            file_groups: dict,
+            train_ratio: float = 0.7,
+            val_ratio: float = 0.10,
+            test_ratio: float = 0.20
+        ) -> tuple[dict, dict, dict]:
+        """
+        Split the keys of a dictionary into train, validation, and test sets.
+
+        :param file_groups: The dictionary to split. Keys are tuples, and values are lists of file paths.
+        :type file_groups: dict
+        :param train_ratio: Proportion of data to use for training.
+        :type train_ratio: float
+        :param val_ratio: Proportion of data to use for validation.
+        :type val_ratio: float
+        :param test_ratio: Proportion of data to use for testing.
+        :type test_ratio: float
+        :return: Three dictionaries: train_dict, val_dict, test_dict.
+        :rtype: tuple[dict, dict, dict]
+        """
+        # Ensure the ratios sum to 1
+        assert train_ratio + val_ratio + test_ratio == 1.0, "Ratios must sum to 1."
+
+        # Shuffle the keys to ensure randomness
+        keys = list(file_groups.keys())
+        random.shuffle(keys)
+
+        # Compute split indices
+        total_keys = len(keys)
+        train_end = int(total_keys * train_ratio)
+        val_end = train_end + int(total_keys * val_ratio)
+
+        # Split the keys
+        train_keys = keys[:train_end]
+        val_keys = keys[train_end:val_end]
+        test_keys = keys[val_end:]
+
+        # Create train, validation, and test dictionaries
+        train_dict = {key: file_groups[key] for key in train_keys}
+        val_dict = {key: file_groups[key] for key in val_keys}
+        test_dict = {key: file_groups[key] for key in test_keys}
+
+        return train_dict, val_dict, test_dict
+
+    def create_source_target_pairs(self, file_groups: dict) -> tuple[list[str], list[str]]:
+        """
+        Auxiliary function to create source-target pairs from the file groups.
+        The source is the AGN image and the target is the AGN-free image.
+
+        :param file_groups: A dictionary containing the file groups.
+        :type file_groups: dict
+        :raises ValueError: If the file does not match the pattern with having
+        the first file as the AGN-free image.
+        :return: A tuple containing the source and target lists.
+        :rtype: tuple[list[str], list[str]]
+        """
+        pattern_agn_free = TELESCOPES_DB["AGN_FREE_PATERN"]#"_sn(\\d+)_.*?_(\\d+).fits"
+
+        source = []
+        target = []
+        tot_targets_count = 0
+        tot_sources_count = 0
+        for _, files in file_groups.items():
+            if any(re.search(pattern_agn_free, f) for f in files):
+                for file in files:
+                    if re.search(pattern_agn_free, file):
+                        tot_targets_count += 1
+                        for i in range(len(files)-1):
+                            target.append(file)
+                    else:
+                        tot_sources_count += 1
+                        source.append(file)
+
+        info = f"Number of source-target pairs: {len(source)}-{len(target)}"
+        info += f"\nTotal targets {tot_targets_count} (AGN free)"
+        info += f"\nTotal sources {tot_sources_count} (AGN corrupted)"
+        print_box(info)
+
+        return source, target
+    

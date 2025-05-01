@@ -1,22 +1,9 @@
-import torch
-from torch.utils.data import DataLoader
-from collections import Counter
-import pickle
-import os
-from utils import print_box
 import matplotlib.pyplot as plt
-import re
-from tqdm import tqdm
 import numpy as np
-import pandas as pd
-from astropy.visualization import AsinhStretch, ImageNormalize
+from astropy.visualization import ImageNormalize
 
-from data_pipeline import GalaxyDataset
-from data_pipeline.getter import TELESCOPES_DB
-from model import AVALAIBLE_MODELS
-from model_utils.metrics import get_metrics
 from model_utils.performance_analysis import PAdict
-from utils import load_pkl_file, save_pkl_file
+from utils import print_box
 
 
 class Plotter:

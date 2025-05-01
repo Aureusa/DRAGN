@@ -5,7 +5,7 @@ import numpy as np
 from astropy.visualization import AsinhStretch, ImageNormalize
 from astropy.io import fits
 
-from data_pipeline.getter import TELESCOPES_DB
+from data_pipeline._telescopes_db import TELESCOPES_DB
 from utils import print_box
 import random
 
@@ -18,6 +18,14 @@ REDSHIFT_PATTERN = rf"{TELESCOPES_DB['REDSHIFT PATTERN']}"
 
 class DataAnalysisEngine:
     def __init__(self, data: list[str]|None = None):
+        """
+        Initialize the DataAnalysisEngine class.
+        This class is responsible for analyzing the data and extracting
+        useful information from it.
+
+        :param data: The data to analyze. If None, the analysis will be skipped.
+        :type data: list[str]|None
+        """
         if data is not None:
             print_box("Data Analysis Engine")
             print_box("Analysing data...")
@@ -78,7 +86,19 @@ class DataAnalysisEngine:
         """
         return self.agn_sorted_matches[-n:]
     
-    def plot_agn_histogram(self, num_bins: int = 10, hist_name: str = "AGN_fraction_histogram") -> None:
+    def plot_agn_histogram(
+            self,
+            num_bins: int = 10,
+            hist_name: str = "AGN_fraction_histogram"
+        ) -> None:
+        """
+        Plot a histogram of the AGN fraction values.
+
+        :param num_bins: The number of bins for the histogram.
+        :type num_bins: int
+        :param hist_name: The name of the histogram file.
+        :type hist_name: str
+        """
         all_matches = self.get_agn_sorted_matches()
         matches, counts = zip(*all_matches)
 
@@ -98,7 +118,19 @@ class DataAnalysisEngine:
         plt.savefig(f"{hist_name}.png")
         plt.close()
 
-    def plot_redshift_histogram(self, num_bins: int = 10, hist_name: str = "Redshift_histogram") -> None:
+    def plot_redshift_histogram(
+            self,
+            num_bins: int = 10,
+            hist_name: str = "Redshift_histogram"
+        ) -> None:
+        """
+        Plot a histogram of the redshift values.
+
+        :param num_bins: The number of bins for the histogram.
+        :type num_bins: int
+        :param hist_name: The name of the histogram file.
+        :type hist_name: str
+        """
         all_matches = self.redshift_sorted_matches
         matches, counts = zip(*all_matches)
 
@@ -119,6 +151,9 @@ class DataAnalysisEngine:
         plt.close()
 
     def make_pi_chart(self) -> None:
+        """
+        Create a pie chart of the AGN fraction distribution.
+        """
         all_matches = self.get_agn_sorted_matches()
         matches, counts = zip(*all_matches)
 
@@ -130,8 +165,12 @@ class DataAnalysisEngine:
         plt.title("AGN Fraction Distribution")
         plt.show()
         
+
+    # TODO: INSPECT BEFORE USE. FIX THE FUNCTION
     def plot_galaxy_grid(self, file_groups: dict, n: int = 5) -> None:
         """
+        Depricated: INSPECT BEFORE USE
+
         Plot a grid of AGN and AGN-free images.
 
         :param file_groups: A dictionary containing the file groups.

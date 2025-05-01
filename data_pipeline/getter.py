@@ -1,19 +1,14 @@
 import os
-import json
 import glob
 import re
 from collections import defaultdict
 
+from data_pipeline._telescopes_db import TELESCOPES_DB
 from utils import print_box
 
 
 # Define the scratch dir to use in habrok
 SCRATCH_DIR = "/scratch"
-
-# Load the data database
-db_path = os.path.join(os.path.join(os.getcwd(), "data_pipeline"), "data_db.json")
-with open(db_path, "r") as f:
-    TELESCOPES_DB = json.load(f)
 
 
 class FilepathGetter:

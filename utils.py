@@ -1,3 +1,4 @@
+import os
 import pickle as pkl
 from typing import Any
 
@@ -41,7 +42,17 @@ def save_pkl_file(data: Any, full_filepath: str):
     :param full_filepath: The full path where the pickle file will be saved.
     :type full_filepath: str
     """
-    full_filepath = full_filepath.lower().replace(" ", "_")
+    full_filepath = full_filepath.replace(" ", "_")
+
+    if not full_filepath.endswith(".pkl"):
+        full_filepath += ".pkl"
+
+    # Create the directory if it doesn't exist
+    directory = os.path.dirname(full_filepath)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     with open(full_filepath, "wb") as file:
         pkl.dump(data, file)
+
     print_box(f"Data dumped in `{full_filepath}`")

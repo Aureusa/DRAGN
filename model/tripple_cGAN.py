@@ -263,7 +263,7 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
         run = wandb.init(project=wandb_project_name, name=wandb_entity)
 
         # Initialize the best validation loss
-        best_val_loss = 0.0122#float('inf')
+        best_val_loss = float('inf')
 
         # Define the device
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
