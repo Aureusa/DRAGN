@@ -152,6 +152,47 @@ class ModelTrainer:
             save_datasets: bool = False,
             **kwargs
         ):
+        """
+        Fine-tune the model with the given data.
+        
+        :param X_train: The training data.
+        :type X_train: list[str]
+        :param X_val: The validation data.
+        :type X_val: list[str]
+        :param X_test: The test data.
+        :type X_test: list[str]
+        :param y_train: The training labels.
+        :type y_train: list[str]
+        :param y_val: The validation labels.    
+        :type y_val: list[str]
+        :param y_test: The test labels.
+        :type y_test: list[str]
+        :param loss_name: The loss function to be used. It has to be
+        one of the available loss functions in the model. If you are not sure
+        what to use, check the list of avaliable loss functions in model_utils module.
+        Example:
+            from model_utils import AVALIABLE_LOSS_FUNCTIONS
+
+            print(AVALAIBLE_LOSS_FUNCTIONS)
+        :type loss_name: str
+        :param batch_size: The batch size to be used.
+        :type batch_size: int
+        :param num_workers: The number of workers to be used.
+        :type num_workers: int
+        :param lr: The learning rate to be used.
+        :type lr: float
+        :param num_epochs: The number of epochs to be used.
+        :type num_epochs: int
+        :param checkpoints: The checkpoints to be used.
+        :type checkpoints: list[int]
+        :param wandb_project_name: The wandb project name to be used.
+        :type wandb_project_name: str
+        :param wandb_entity: The wandb entity to be used.
+        :type wandb_entity: str
+        :param save_datasets: Whether to save the datasets or not.
+        :type save_datasets: bool
+        :param kwargs: The keyword arguments to be passed to the model's loading method.
+        :type kwargs: dict"""
         self.model.load_model(**kwargs)
         self.train_model(
             X_train,

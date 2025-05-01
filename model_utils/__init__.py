@@ -1,57 +1,51 @@
 from model_utils.model_testing import ModelTester
 from model_utils.model_training import ModelTrainer
 from model_utils.loss_functions import _get_avaliable_loss_funcstions
+from model_utils.plotter import Plotter
 
 
 AVALIABLE_LOSS_FUNCTIONS = list(_get_avaliable_loss_funcstions().keys())
 
 
-'''
-import torch
-from botorch.utils.sampling import draw_sobol_samples
-from botorch.models import SingleTaskGP
-from botorch.fit import fit_gpytorch_mll
-from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikelihood
+def clean_n_image_with_multiple_models(
+        model_names: list[str],
+        model_types: list[str],
+        model_filenames: list[str],
+        data_folder: str,
+        n: int,
+        filename: str = "test_image"
+    ) -> None:
+    sources_list = []
+    targets_list = []
+    cleaned_images_list = []
+    diffs_list = []
+    psfs_list = []
+    for i in range(len(model_names)):
+        tester = ModelTester(
+            model_name=model_names[i],
+            model_type=model_types[i],
+            model_filename=model_filenames[i],
+            data_folder=data_folder
+        )
 
-from model_utils.botunning import objective_function, get_next_candidate
+        source_arr, target_arr, cleaned_image_arr, diff_predicted_arr, psf_arr, norm_list = tester.clean_n_images(n=n)
 
+        sources_list.append(source_arr)
+        targets_list.append(target_arr)
+        cleaned_images_list.append(cleaned_image_arr)
+        diffs_list.append(diff_predicted_arr)
+        psfs_list.append(psf_arr)
 
-# TODO: 
-# 1. Define the hyperparameter space
-# 2. Define the objective function
-def hyperparameter_optimization(bounds: torch, num_iterations: int = 10):
-    # Draw 5 random samples from the parameter space
-    X_init = draw_sobol_samples(bounds=bounds, n=5, q=1).squeeze(1)
+    plotter = Plotter()
 
-    # Evaluate the objective function on the sampled parameters
-    Y_init = torch.tensor([objective_function(x.unsqueeze(0)) for x in X_init]).unsqueeze(-1)
-
-    # Train a Gaussian Proccess model on the sampled data
-    gp_model = SingleTaskGP(X_init, Y_init)
-
-    for iteration in range(num_iterations):  # Run 10 optimization iterations
-        # Define the marginal log likelihood
-        mll = ExactMarginalLogLikelihood(gp_model.likelihood, gp_model)
-
-        # Optimize GP Model
-        fit_gpytorch_mll(mll)
-
-        # Get the next candidate hyperparameters
-        new_X = get_next_candidate(bounds, gp_model, Y_init)
-
-        # Evaluate the objective function on the sampled parameters
-        new_Y = torch.tensor([objective_function(new_X)]).unsqueeze(-1)
-
-        # Update dataset
-        X_init = torch.cat([X_init, new_X])
-        Y_init = torch.cat([Y_init, new_Y])
-
-        # Update GP model
-        gp_model.set_train_data(X_init, Y_init, strict=False)
-
-        print(f"Iteration {iteration+1}: Best Dice Loss = {-Y_init.max().item()}")
-
-    # Best hyperparameters
-    best_params = X_init[Y_init.argmax()]
-    return best_params
-'''
+    plotter.plot_cleaned_images(
+        sources=sources_list,
+        targets=targets_list,
+        cleaned_images=cleaned_images_list,
+        diffs=diffs_list,
+        psfs=psfs_list,
+        titles=model_names,
+        norms=norm_list,
+        filename=filename
+    )
+    

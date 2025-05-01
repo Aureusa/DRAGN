@@ -201,6 +201,23 @@ class AttentionUNET(AttentionUnet, BaseModel):
         info += f"Path to model: {os.getcwd()}"
         print_box(info)
 
+    def load_model(self, filename: str,  dir_ = "Default"):
+        """
+        Load the model from a file.
+        
+        :param filename: Name of the file to load the model from.
+        :type name: str
+        :param dir_: Directory to load the model from.
+        :type dir_: str
+        """
+        if dir_ == "Default":
+            dir_ = os.path.join(os.getcwd(), "data", "saved_models")
+
+        self.load_state_dict(torch.load(os.path.join(dir_, filename), map_location=torch.device('cpu')))
+
+        info = f"Model `{filename}` loaded successfully!"
+        print_box(info)
+
     def save_train_val_loss(self, data_dir: str):
         """
         Save the training and validation loss.

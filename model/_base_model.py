@@ -20,6 +20,14 @@ class BaseModel(ABC):
         """
         pass
 
+    @abstractmethod
+    def load_model(self):
+        """
+        Load the model.
+        """
+        pass
+    
+    @abstractmethod
     def save_train_val_loss(self):
         """
         Save the training and validation loss.

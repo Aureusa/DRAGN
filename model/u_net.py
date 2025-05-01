@@ -2,22 +2,54 @@ import torch
 import torch.nn as nn
 from monai.networks.nets import BasicUNet
 
+import os
+from tqdm import tqdm
+from copy import deepcopy
+import pickle
+import wandb
+
+
+from model._base_model import BaseModel
+from utils import print_box
+
 from model._base_model import BaseModel
 
 # TODO: Impliment the train_model, save_model, and save_train_val_loss methods
 class UNet(BasicUNet, BaseModel):
     def __init__(
             self,
-            spatial_dims=3,
+            spatial_dims=2,
             in_channels=1,
-            out_channels=2,
+            out_channels=1,
             features=(32, 32, 64, 128, 256, 32),
             act=('LeakyReLU', {'inplace': True, 'negative_slope': 0.1}),
             norm=('instance', {'affine': True}),
             bias=True,
-            dropout=0.0,
+            dropout=0.1,
             upsample='deconv'
         ) -> None:
+        """
+        Initialize the UNet model.
+
+        :param spatial_dims: Number of spatial dimensions.
+        :type spatial_dims: int
+        :param in_channels: Number of input channels.
+        :type in_channels: int
+        :param out_channels: Number of output channels.
+        :type out_channels: int
+        :param features: Number of features in each layer.
+        :type features: tuple
+        :param act: Activation function.
+        :type act: tuple
+        :param norm: Normalization layer.
+        :type norm: tuple
+        :param bias: Whether to use bias in the convolutional layers.
+        :type bias: bool
+        :param dropout: Dropout rate.
+        :type dropout: float
+        :param upsample: Upsampling method.
+        :type upsample: str
+        """
         super().__init__(
             spatial_dims=spatial_dims,
             in_channels=in_channels,
@@ -30,6 +62,28 @@ class UNet(BasicUNet, BaseModel):
             upsample=upsample
         )
 
+        # Define the training and validation loss history
+        self._train_loss = []
+        self._val_loss = []
+
+    @property
+    def train_loss(self):
+        """
+        Get the training loss history.
+        
+        :return: A deep copy of the training loss history.
+        """
+        return deepcopy(self._train_loss)
+    
+    @property
+    def val_loss(self):
+        """
+        Get the validation loss history.
+        
+        :return: A deep copy of the validation loss history.
+        """
+        return deepcopy(self._val_loss)
+
     def forward(self, x):
         """
         Forward pass through the UNet model.
@@ -39,15 +93,179 @@ class UNet(BasicUNet, BaseModel):
         """
         return super().forward(x)
     
-    def train_model(self):
-        raise NotImplementedError("train_model method is not implemented for UNet.")
-    
-    def save_train_val_loss(self):
-        raise NotImplementedError("save_train_val_loss method is not implemented for UNet.")
+    def train_model(
+            self,
+            train_loader: torch.utils.data.DataLoader,
+            val_loader: torch.utils.data.DataLoader,
+            lr: float,
+            loss_function: callable,
+            num_epochs: int,
+            checkpoints: list[int] = [25],
+            wandb_project_name: str = "Deep-AGN-Clean",
+            wandb_entity: str = "myverynicemodel"
+        ) -> None:
+        """
+        Train the model.
 
-    def train_model(self):
-        raise NotImplementedError("train_model method is not implemented for UNet.")
+        :param train_loader: DataLoader for training data.
+        :train_loader type: torch.utils.data.DataLoader
+        :param val_loader: DataLoader for validation data.
+        :val_loader type: torch.utils.data.DataLoader
+        :param lr: Learning rate.
+        :lr type: float
+        :param loss_function: Loss function to use.
+        :loss_function type: callable
+        :param num_epochs: Number of epochs to train for.
+        :num_epochs type: int
+        :param checkpoints: List of epochs to save checkpoints.
+        :checkpoints type: list[int]
+        :param wandb_project_name: WandB project name.
+        :wandb_project_name type: str
+        :param wandb_entity: WandB entity name.
+        :wandb_entity type: str
+        """
+        run = wandb.init(project=wandb_project_name, name=wandb_entity)
 
-    def save_model(self):
-        raise NotImplementedError("save_model method is not implemented for UNet.")
-    
+        # Initialize the best validation loss
+        best_val_loss = float('inf')
+
+        # Define the device
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.to(device)
+
+        print_box(f"Training on {device}!")
+
+        # Define the optimizer
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+
+        # Iterate over epochs
+        for epoch in tqdm(
+            range(num_epochs),
+            desc='Training...'
+        ):
+            self.train()
+            epoch_loss = 0
+            for inputs, targets, psf in train_loader:
+                # Move the data to the device
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+                psf = psf.to(device)
+
+                # Zero the gradients
+                optimizer.zero_grad()
+
+                # Generate predictions
+                outputs = self.forward(inputs)
+
+                # Calculate the loss
+                loss = loss_function(inputs, outputs, targets, psf)
+
+                # Perform backpropagation
+                loss.backward()
+                optimizer.step()
+
+                # Update the loss
+                epoch_loss += loss.item()
+
+                # Log losses to WandB
+                wandb.log({
+                    "train_loss": loss.item() / len(inputs),
+                })
+
+            # Evaluate the model
+            self.eval()
+            val_loss = 0
+
+            l1_loss = nn.L1Loss()
+            with torch.no_grad():
+                for inputs, targets, psf in val_loader:
+                    # Move the data to the device
+                    inputs = inputs.to(device)
+                    targets = targets.to(device)
+                    psf = psf.to(device)
+
+                    # Generate predictions
+                    outputs = self.forward(inputs)
+
+                    # Calculate the loss
+                    loss = l1_loss(outputs, targets)
+
+                    # Update the loss
+                    val_loss += loss.item()
+
+                    # Log losses to WandB
+                    wandb.log({
+                        "val_loss": loss.item() / len(inputs),
+                    })
+
+            # Save the training and validation loss
+            self._train_loss.append(epoch_loss / len(train_loader))
+            self._val_loss.append(val_loss / len(val_loader))
+
+
+            if val_loss / len(val_loader) < best_val_loss:
+                best_val_loss = val_loss / len(val_loader)  # Update the best validation loss
+                self.save_model(f"{wandb_entity}_best_model")
+                info = f"Best model saved at epoch {epoch} with validation loss: {best_val_loss:.4f}"
+                print_box(info)
+
+            if epoch in checkpoints:
+                self.save_model(f"{wandb_entity}_epoch_{epoch}")
+                info = f"Checkpoint model saved at epoch {epoch}!"
+                print_box(info)
+
+            print(f"Epoch Loss: {epoch_loss / len(train_loader):.4f}, "
+                  f"Validation Loss: {val_loss / len(val_loader):.4f}")
+            
+        # Finish WandB run
+        wandb.finish()
+
+    def save_model(self, name: str):
+        """
+        Save the model to a file.
+        
+        :param name: Name of the file to save the model to.
+        :type name: str
+        """
+        torch.save(self.state_dict(), f"{name}.pth")
+
+        info = f"Model `{name}.pth` saved successfully!"
+        info += f"Path to model: {os.getcwd()}"
+        print_box(info)
+
+    def load_model(self, filename: str,  dir_ = "Default"):
+        """
+        Load the model from a file.
+        
+        :param filename: Name of the file to load the model from.
+        :type name: str
+        :param dir_: Directory to load the model from.
+        :type dir_: str
+        """
+        if dir_ == "Default":
+            dir_ = os.path.join(os.getcwd(), "data", "saved_models")
+
+        self.load_state_dict(torch.load(os.path.join(dir_, filename), map_location=torch.device('cpu')))
+
+        info = f"Model `{filename}` loaded successfully!"
+        print_box(info)
+
+    def save_train_val_loss(self, data_dir: str):
+        """
+        Save the training and validation loss.
+
+        :param data_dir: Directory to save the loss files.
+        :type data_dir: str
+        """
+        train_loss_path = os.path.join(data_dir, f"train_loss.pkl")
+        with open(train_loss_path, "wb") as file:
+            pickle.dump(self.train_loss, file)
+
+        info = f"Training Loss saved successfully in `{train_loss_path}`!"
+
+        val_loss_path = os.path.join(data_dir, f"val_loss.pkl")
+        with open(val_loss_path, "wb") as file:
+            pickle.dump(self.val_loss, file)
+
+        info += f"\nValidation Loss saved successfully in `{val_loss_path}`!"
+        print_box(info)
