@@ -1,13 +1,35 @@
+"""
+NOTE FOR USERS:
+
+The preferred way to obtain data splits for this package is to use the
+`ForgeData` class and its `forge_training_data` method.
+
+Example usage:
+    from data_pipeline.data_split import ForgeData
+    from data_pipeline.getter import FilepathGetter
+
+    # Initialize the FilepathGetter with the desired telescope and redshift values.
+    getter = FilepathGetter(path="path/to/data")
+    forge = ForgeData()
+
+    # Retrieve the file groups from the getter.
+    file_groups, _ = getter.get_data()
+
+    # Forge the training data using the ForgeData class.
+    X_train, y_train, X_val, y_val, X_test, y_test = forge.forge_training_data(file_groups)
+
+This ensures consistent and correct data preparation for all downstream tasks.
+"""
 import re
 from sklearn.model_selection import train_test_split
 import random
-import glob
-from collections import defaultdict
 
 from data_pipeline._telescopes_db import TELESCOPES_DB
+from loggers_utils import log_execution
 from utils import print_box
+from utils_utils.validation import validate_dict
 
-
+# Derpicated function, use `ForgeData` class instead.
 def create_source_target_pairs(file_groups: dict) -> tuple[list[str], list[str]]:
     """
     Auxiliary function to create source-target pairs from the file groups.
@@ -20,7 +42,7 @@ def create_source_target_pairs(file_groups: dict) -> tuple[list[str], list[str]]
     :return: A tuple containing the source and target lists.
     :rtype: tuple[list[str], list[str]]
     """
-    pattern_agn_free = TELESCOPES_DB["AGN_FREE_PATERN"]
+    pattern_agn_free = TELESCOPES_DB["AGN FREE PATTERN"]
 
     source = []
     target = []
@@ -45,6 +67,7 @@ def create_source_target_pairs(file_groups: dict) -> tuple[list[str], list[str]]
     return source, target
 
 
+# Derpicated function, use `ForgeData` class instead.
 def test_train_val_split(
         X : list[str],
         y : list[str],
@@ -91,17 +114,33 @@ class ForgeData:
     """
     Class to handle the data splitting and file grouping for the AGN dataset.
     """
-    def forge_training_data(self, file_groups: dict): # MAIN FUNCTION
+    @log_execution("Forging data...", "Data forged successfully!")
+    def forge_training_data(
+            self,
+            file_groups: dict,
+            train_ratio: float = 0.7,
+            val_ratio: float = 0.10,
+            test_ratio: float = 0.20
+        ) -> tuple[list[str], list[str], list[str], list[str], list[str], list[str]]:
         """
         Main function to forge the training data.
         It retrieves the data, splits it into train, validation, and test sets,
         and creates source-target pairs.
         
+        :param file_groups: The dictionary containing the file groups. The keys are tuples,
+        and the values are lists of file paths contnaining at least 1 AGN free galaxy.
+        This is expected to be the output of the `get_data` method of the `FilepathGetter` class.
+        :type file_groups: dict
         :return: A tuple containing the training, validation, and test sets.
         :rtype: tuple[list[str], list[str], list[str], list[str], list[str], list[str]]
         """
         # Split the data into training, validation, and test sets.
-        train_dict, val_dict, test_dict = self.train_test_val_split(file_groups)
+        train_dict, val_dict, test_dict = self.train_test_val_split(
+            file_groups,
+            train_ratio=train_ratio,
+            val_ratio=val_ratio,
+            test_ratio=test_ratio
+        )
         
         # Create source-target pairs for training, validation, and test sets.
         X_train, y_train = self.create_source_target_pairs(train_dict)
@@ -109,9 +148,11 @@ class ForgeData:
         X_test, y_test = self.create_source_target_pairs(test_dict)
 
         # Info
-        print(f"Train: {len(X_train)}-{len(y_train)}")
-        print(f"Validation: {len(X_val)}-{len(y_val)}")
-        print(f"Test: {len(X_test)}-{len(y_test)}")
+        info = f"Set: X-Y\n"
+        info += f"Train: {len(X_train)}-{len(y_train)}\n"
+        info += f"Validation: {len(X_val)}-{len(y_val)}\n"
+        info += f"Test: {len(X_test)}-{len(y_test)}"
+        print_box(info)
 
         return X_train, y_train, X_val, y_val, X_test, y_test
         
@@ -136,6 +177,8 @@ class ForgeData:
         :return: Three dictionaries: train_dict, val_dict, test_dict.
         :rtype: tuple[dict, dict, dict]
         """
+        validate_dict(file_groups, key_type=tuple, value_type=list)
+
         # Ensure the ratios sum to 1
         assert train_ratio + val_ratio + test_ratio == 1.0, "Ratios must sum to 1."
 
@@ -172,7 +215,9 @@ class ForgeData:
         :return: A tuple containing the source and target lists.
         :rtype: tuple[list[str], list[str]]
         """
-        pattern_agn_free = TELESCOPES_DB["AGN_FREE_PATERN"]#"_sn(\\d+)_.*?_(\\d+).fits"
+        validate_dict(file_groups, key_type=tuple, value_type=list)
+        
+        pattern_agn_free = TELESCOPES_DB["AGN FREE PATTERN"]#"_sn(\\d+)_.*?_(\\d+).fits"
 
         source = []
         target = []

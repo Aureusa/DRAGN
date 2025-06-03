@@ -8,27 +8,30 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms as transforms
-from monai.networks.nets import AttentionUnet, Discriminator, ViT
 
 from model._base_model import BaseModel
+from model.patch_discriminator import PatchDiscriminatorWithAttention
+from model.attention_unet import AttentionUNET
+from model_utils.loss_functions import PerceptualLoss
 from utils import print_box
+from loggers_utils import TrainingLogger
 
-class tripple_cGAN(torch.nn.Module, BaseModel):
+
+class PatchGAN(torch.nn.Module, BaseModel):
     def __init__(
             self,
-            discriminator_in_shape=(2, 128, 128),
+            discriminator_in_channels=2,
             spatial_dims=2,
             in_channels=1,
             out_channels=1,
             channels=(64, 128, 256, 512),
-            strides=(2, 2, 2),
+            strides=(2, 2, 2, 2),
             kernel_size=3,
             up_kernel_size=3,
             dropout=0.1,
-            layers=None,
-            l_rec_weight=10,
-            l_adv_weight=10,
-            l_p_weight=0.01,
+            l_rec_weight=100,
+            l_adv_weight=1,
+            l_p_weight=0,
             *args,
             **kwargs
         ) -> None:
@@ -57,7 +60,7 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
         super().__init__()
 
         # Define the generator
-        self.G = AttentionUnet(
+        self.G = AttentionUNET(
             spatial_dims=spatial_dims,
             in_channels=in_channels,
             out_channels=out_channels,
@@ -69,48 +72,15 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
             *args,
             **kwargs
         )
-        
-        # Define the discriminator
-        # self.D = Discriminator(
-        #     in_shape = discriminator_in_shape,
-        #     channels=(64, 128, 256, 512),
-        #     strides=(2, 2, 2),
-        # )
 
-        self.D = ViT(
-            in_channels,
-            patch_size=16,
-            img_size=(128,128),
-            hidden_size=384,
-            mlp_dim=768,
-            num_layers=6,
-            num_heads=12,
-            proj_type='conv',
-            pos_embed_type='learnable',
-            classification=True,
-            num_classes=1,
-            dropout_rate=0.0,
-            spatial_dims=2,
-            post_activation='Ignore',
-            qkv_bias=False,
-            save_attn=False
+        self.D = PatchDiscriminatorWithAttention(
+            in_channels=discriminator_in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            channels=channels
         )
 
-        # Load pre-trained VGG16
-        if layers is None:
-            layers = ['3', '8', '15', '22']  # relu1_2, relu2_2, relu3_3, relu4_3
-        self.selected_layers = layers
-        self.vgg = models.vgg16(pretrained=True).features
-        for param in self.vgg.parameters():
-            param.requires_grad = False
-
-        # Image preprocessing for VGG16
-        self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                                std=[0.229, 0.224, 0.225])
-        ])
+        self._perceptual_loss = PerceptualLoss()
 
         # Define the loss function
         self.l1_loss_function = nn.L1Loss()
@@ -120,41 +90,10 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
         self.l_rec_weight = l_rec_weight
         self.l_adv_weight = l_adv_weight
         self.l_p_weight = l_p_weight
-
-        # Define the training and validation loss history
-        self._val_loss = []
-        self._train_loss_discriminator = []
-        self._train_loss_generator = []
         
         # Define the labels for real and fake images
         self.real_label = 0.9
-        self.fake_label = 0.1
-
-    @property
-    def train_loss_generator(self):
-        """
-        Get the training loss history for the generator.
-        
-        :return: A deep copy of the training loss history for the generator."""
-        return deepcopy(self._train_loss_generator)
-    
-    @property
-    def train_loss_discriminator(self):
-        """
-        Get the training loss history for the discriminator.
-
-        :return: A deep copy of the training loss history for the discriminator.
-        """
-        return deepcopy(self._train_loss_discriminator)
-    
-    @property
-    def val_loss(self):
-        """
-        Get the validation loss history.
-        
-        :return: A deep copy of the validation loss history.
-        """
-        return deepcopy(self._val_loss)
+        self.fake_label = 0.0
 
     def forward(self, x):
         """
@@ -182,74 +121,8 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
         :param target_img: Target image tensor.
         :return: Output tensor.
         """
-        #x = torch.cat([input_img, target_img], dim=1)
-        return self.D(target_img)[0]
-
-    def forward_vgg(self, x: torch.Tensor) -> list[torch.Tensor]:
-        """
-        Forward pass of the VGG16 model.
-        
-        :param x: Input tensor.
-        :type x: torch.Tensor
-        :return: List of feature maps from the selected layers.
-        :rtype: list[torch.Tensor]
-        """
-        features = []
-        for name, layer in self.vgg._modules.items():
-            x = layer(x)
-            if name in self.selected_layers:
-                features.append(x)
-        return features
-    
-    def perceptual_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """
-        Compute the perceptual loss between two images.
-        
-        :param x: First image tensor.
-        :type x: torch.Tensor
-        :param y: Second image tensor.
-        :type y: torch.Tensor
-        :return: Perceptual loss.
-        :rtype: torch.Tensor
-        """
-        # Preprocess the images
-        x = self._preprocess_batch(x)
-        y = self._preprocess_batch(y)
-
-        # Compute perceptual difference
-        features1 = self.forward_vgg(x)
-        features2 = self.forward_vgg(y)
-
-        # Compute L1 distance across feature maps
-        loss = 0
-        for f1, f2 in zip(features1, features2):
-            loss += self.l1_loss_function(f1, f2)
-
-            # Add L2 regularization on feature maps
-            loss += 1e-4 * (f1.norm(2) + f2.norm(2))
-        return loss
-    
-    def _preprocess_batch(self, batch_tensor: torch.Tensor) -> torch.Tensor:
-        """
-        Preprocess the input batch tensor for VGG16.
-        
-        :param batch_tensor: Input batch tensor.
-        :type batch_tensor: torch.Tensor
-        :return: Preprocessed batch tensor.
-        :rtype: torch.Tensor
-        """
-        if batch_tensor.shape[1] == 1:  # Grayscale
-            batch_tensor = batch_tensor.repeat(1, 3, 1, 1)  # Convert to RGB
-
-        # Resize
-        batch_tensor = F.interpolate(batch_tensor, size=(224, 224), mode='bilinear', align_corners=False)
-
-        # Normalize
-        mean = torch.tensor([0.485, 0.456, 0.406], device=batch_tensor.device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=batch_tensor.device).view(1, 3, 1, 1)
-        batch_tensor = (batch_tensor - mean) / std
-
-        return batch_tensor
+        x = torch.cat([input_img, target_img], dim=1) # (B, 2, H, W)
+        return self.D(x)
     
     def train_model(
             self,
@@ -281,10 +154,16 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
         :param wandb_entity: WandB entity name.
         :wandb_entity type: str
         """
+        # Initialize loggers
         run = wandb.init(project=model_name, name=model_name)
+        logger = TrainingLogger(data_path, adverserial_logger=True)
 
         # Initialize the best validation loss
         best_val_loss = float('inf')
+
+        # Load the best validation loss if in logger
+        if logger.get_best_val_loss() < best_val_loss:
+            best_val_loss = logger.get_best_val_loss()
 
         # Define the device
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -295,6 +174,16 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
         # Define the optimizer
         optimizer_G = torch.optim.Adam(self.G.parameters(), lr=lr, weight_decay=1e-4)
         optimizer_D = torch.optim.Adam(self.D.parameters(), lr=lr)
+
+         # Load optimzer if in logger
+        optimizer_G_state = logger.get_optimizer_state()
+        optimizer_D_state = logger.get_optimizer2_state()
+        if optimizer_G_state is not None:
+            optimizer_G.load_state_dict(optimizer_G_state)
+            print_box("Optimizer state (Generator) loaded successfully!")
+        if optimizer_D_state is not None:
+            optimizer_D.load_state_dict(optimizer_D_state)
+            print_box("Optimizer state (Discriminator) loaded successfully!")
 
         # Iterate over epochs
         for epoch in tqdm(
@@ -326,7 +215,7 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
                 d_loss_real = self.loss_D(real_pred, torch.full_like(real_pred, self.real_label))
                 d_loss_fake = self.loss_D(fake_pred, torch.full_like(fake_pred, self.fake_label))
                 d_loss = (d_loss_real + d_loss_fake) * 0.5
-                
+
                 # Perform backpropagation
                 d_loss.backward()
                 optimizer_D.step()
@@ -353,16 +242,18 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
                 )
                 
                 # Calculate the perceptual loss
-                g_p_loss = self.perceptual_loss(
-                    targets,
-                    fake_output
-                )
+                # g_p_loss = self._perceptual_loss(
+                #     inputs,
+                #     fake_output,
+                #     targets,
+                #     psf
+                # )
 
                 # Calculate the total generator loss
                 g_loss = self.l_rec_weight * g_rec_loss + \
-                    self.l_adv_weight * g_adv_loss + \
-                    self.l_p_weight * g_p_loss
-
+                    self.l_adv_weight * g_adv_loss# + \
+                    #self.l_p_weight * g_p_loss
+                
                 # Perform backpropagation
                 g_loss.backward()
                 optimizer_G.step()
@@ -378,8 +269,9 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
 
             # Evaluate the model
             self.G.eval()
+            self.D.eval()
             val_loss = 0
-
+            val_loss_D = 0
             with torch.no_grad():
                 for inputs, targets in val_loader:
                     # Move the data to the device
@@ -388,40 +280,70 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
                     psf = inputs - targets
 
                     # Generate predictions
-                    outputs = self.forward(inputs)
+                    fake_output = self.forward_G(inputs)
+
+                    real_pred = self.forward_D(inputs, targets)
+                    fake_pred = self.forward_D(inputs, fake_output.detach())
 
                     # Calculate the loss
-                    loss = self.l1_loss_function(outputs, targets)
+                    d_loss_real = self.loss_D(real_pred, torch.full_like(real_pred, self.real_label))
+                    d_loss_fake = self.loss_D(fake_pred, torch.full_like(fake_pred, self.fake_label))
+                    d_loss = (d_loss_real + d_loss_fake) * 0.5
 
-                    # Update the loss
-                    val_loss += loss.item()
+                    # Calculate the adversarial loss
+                    g_adv_loss = self.loss_D(
+                        fake_pred,
+                        torch.full_like(fake_pred, self.real_label)
+                    )
 
-                    # Log losses to WandB
+                    # Calculate the reconstruction loss
+                    g_rec_loss = loss_function(
+                        inputs,
+                        fake_output,
+                        targets,
+                        psf
+                    )
+                    
+                    # Calculate the perceptual loss
+                    # g_p_loss = self._perceptual_loss(
+                    #     inputs,
+                    #     fake_output,
+                    #     targets,
+                    #     psf
+                    # )
+
+                    # Calculate the total generator loss
+                    g_loss = self.l_rec_weight * g_rec_loss + \
+                        self.l_adv_weight * g_adv_loss# + \
+                        #self.l_p_weight * g_p_loss
+
                     wandb.log({
-                        "val_loss": loss.item()
+                        "val_loss": g_loss.item(),
+                        "val_loss_discriminator": d_loss.item(),
                     })
 
-            # Save the training and validation loss
-            self._train_loss_generator.append(epoch_loss_G / len(train_loader))
-            self._train_loss_discriminator.append(epoch_loss_D / len(train_loader))
-            self._val_loss.append(val_loss / len(val_loader))
+                    val_loss += g_loss.item()
+                    val_loss_D += d_loss.item()
 
-            if val_loss / len(val_loader) < best_val_loss:
-                best_val_loss = val_loss / len(val_loader)  # Update the best validation loss
+            if logger.check_best_val_loss(val_loss / len(val_loader)):
+                best_val_loss = val_loss / len(val_loader)
                 self.save_model(f"{model_name}_best_model", data_path)
-                info = f"Best model saved at epoch {epoch} with va lidation loss: {best_val_loss:.4f}"
+                info = f"Best model saved at epoch {epoch} with validation loss: {best_val_loss:.4f}"
                 print_box(info)
-
 
             self.save_model(f"{model_name}_epoch", data_path)
             info = f"Checkpoint model saved at epoch {epoch}!"
             print_box(info)
 
-            # Log the training and validation loss
-            info = f"Epoch Loss Generator: {epoch_loss_G / len(train_loader):.4f}"
-            info += f"\nEpoch Loss Discriminator: {epoch_loss_D / len(train_loader):.4f}"
-            info += f"\nValidation Loss: {val_loss / len(val_loader):.4f}"
-            print_box(info)
+            logger.log_epoch(
+                train_loss=epoch_loss_G / len(train_loader),
+                val_loss=val_loss / len(val_loader),
+                best_val_loss=best_val_loss,
+                optimizer=optimizer_G,
+                optimizer2=optimizer_D,
+                train_loss_D=epoch_loss_D / len(train_loader),
+                val_loss_D=val_loss_D / len(val_loader)
+            )
             
         # Finish WandB run
         wandb.finish()
@@ -537,36 +459,8 @@ class tripple_cGAN(torch.nn.Module, BaseModel):
         :param name: Name of the file to load the model from.
         :type name: str
         """
-        print_box("*** Starting to load the model... ***")
-        if dir_ == "Default":
-            dir_ = os.path.join(os.getcwd(), "data", "saved_models")
-        info = f"Path to model: {dir_}"
-        if discriminator_name == "fresh":
-            self.D = ViT(
-                1,
-                patch_size=16,
-                img_size=(128,128),
-                hidden_size=384,
-                mlp_dim=768,
-                num_layers=6,
-                num_heads=12,
-                proj_type='conv',
-                pos_embed_type='learnable',
-                classification=True,
-                num_classes=1,
-                dropout_rate=0.0,
-                spatial_dims=2,
-                post_activation='Ignore',
-                qkv_bias=False,
-                save_attn=False
-            )
-        else:
-            self.D.load_state_dict(torch.load(os.path.join(dir_, f"{discriminator_name}.pth"), map_location=torch.device('cpu')))
-            info += f"\nDiscriminator model `{discriminator_name}.pth` loaded successfully!"
-
-        self.G.load_state_dict(torch.load(os.path.join(dir_, f"{generator_name}.pth"), map_location=torch.device('cpu')))
-        info += f"\nGenerator model `{generator_name}.pth` loaded successfully!"
-        print_box(info)
+        self.D.load_model(discriminator_name, dir_)
+        self.G.load_model(generator_name, dir_)
 
     def save_train_val_loss(self, data_dir: str):
         """

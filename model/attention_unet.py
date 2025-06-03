@@ -4,10 +4,13 @@ from copy import deepcopy
 import pickle
 import wandb
 import torch
+import torch.nn as nn
 from monai.networks.nets import AttentionUnet
 
 from model._base_model import BaseModel
+from loggers_utils import TrainingLogger
 from utils import print_box
+from utils_utils.device import get_device
 
 
 class AttentionUNET(AttentionUnet, BaseModel):
@@ -49,28 +52,6 @@ class AttentionUNET(AttentionUnet, BaseModel):
             **kwargs
         )
 
-        # Define the training and validation loss history
-        self._train_loss = []
-        self._val_loss = []
-
-    @property
-    def train_loss(self):
-        """
-        Get the training loss history.
-        
-        :return: A deep copy of the training loss history.
-        """
-        return deepcopy(self._train_loss)
-    
-    @property
-    def val_loss(self):
-        """
-        Get the validation loss history.
-        
-        :return: A deep copy of the validation loss history.
-        """
-        return deepcopy(self._val_loss)
-
     def forward(self, x):
         """
         Forward pass of the model.
@@ -87,9 +68,8 @@ class AttentionUNET(AttentionUnet, BaseModel):
             lr: float,
             loss_function: callable,
             num_epochs: int,
-            checkpoints: list[int] = [25],
-            wandb_project_name: str = "Deep-AGN-Clean",
-            wandb_entity: str = "myverynicemodel"
+            model_name: str = "Placeholder",
+            data_path: str = "data",
         ) -> None:
         """
         Train the model.
@@ -111,15 +91,31 @@ class AttentionUNET(AttentionUnet, BaseModel):
         :param wandb_entity: WandB entity name.
         :wandb_entity type: str
         """
-        run = wandb.init(project=wandb_project_name, name=wandb_entity)
+        # Initialize loggers
+        run = wandb.init(project=model_name, name=model_name)
+        logger = TrainingLogger(data_path)
+
+        # Initialize the best validation loss
+        best_val_loss = float('inf')
+
+        # Load the best validation loss if in logger
+        if logger.get_best_val_loss() < best_val_loss:
+            best_val_loss = logger.get_best_val_loss()
+
         # Define the device
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = get_device()
         self.to(device)
 
         print_box(f"Training on {device}!")
 
         # Define the optimizer
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+
+        # Load optimzer if in logger
+        optimizer_state = logger.get_optimizer_state()
+        if optimizer_state is not None:
+            optimizer.load_state_dict(optimizer_state)
+            print_box("Optimizer state loaded successfully!")
 
         # Iterate over epochs
         for epoch in tqdm(
@@ -128,11 +124,11 @@ class AttentionUNET(AttentionUnet, BaseModel):
         ):
             self.train()
             epoch_loss = 0
-            for inputs, targets, psf in train_loader:
+            for inputs, targets in train_loader:
                 # Move the data to the device
                 inputs = inputs.to(device)
                 targets = targets.to(device)
-                psf = psf.to(device)
+                psf = inputs - targets
 
                 # Zero the gradients
                 optimizer.zero_grad()
@@ -150,15 +146,21 @@ class AttentionUNET(AttentionUnet, BaseModel):
                 # Update the loss
                 epoch_loss += loss.item()
 
+                # Log losses to WandB
+                wandb.log({
+                    "train_loss": loss.item() / len(inputs),
+                })
+
             # Evaluate the model
             self.eval()
             val_loss = 0
+
             with torch.no_grad():
-                for inputs, targets, psf in val_loader:
+                for inputs, targets in val_loader:
                     # Move the data to the device
                     inputs = inputs.to(device)
                     targets = targets.to(device)
-                    psf = psf.to(device)
+                    psf = inputs - targets
 
                     # Generate predictions
                     outputs = self.forward(inputs)
@@ -169,36 +171,44 @@ class AttentionUNET(AttentionUnet, BaseModel):
                     # Update the loss
                     val_loss += loss.item()
 
-            # Save the training and validation loss
-            self._train_loss.append(epoch_loss / len(train_loader))
-            self._val_loss.append(val_loss / len(val_loader))
+                    # Log losses to WandB
+                    wandb.log({
+                        "val_loss": loss.item() / len(inputs),
+                    })
 
-            # Log losses to WandB
-            wandb.log({
-                "train_loss": epoch_loss / len(train_loader),
-                "val_loss": val_loss / len(val_loader)
-            })
 
-            if epoch in checkpoints:
-                self.save_model(f"{wandb_entity}_epoch_{epoch}")
+            if logger.check_best_val_loss(val_loss / len(val_loader)):
+                best_val_loss = val_loss / len(val_loader)
+                self.save_model(f"{model_name}_best_model", data_path)
+                info = f"Best model saved at epoch {epoch} with validation loss: {best_val_loss:.4f}"
+                print_box(info)
 
-            print(f"Epoch Loss: {epoch_loss / len(train_loader):.4f}, "
-                  f"Validation Loss: {val_loss / len(val_loader):.4f}")
+            self.save_model(f"{model_name}_epoch", data_path)
+            info = f"Checkpoint model saved at epoch {epoch}!"
+            print_box(info)
+
+            logger.log_epoch(
+                train_loss=epoch_loss / len(train_loader),
+                val_loss=val_loss / len(val_loader),
+                best_val_loss=best_val_loss,
+                optimizer=optimizer
+            )
             
         # Finish WandB run
         wandb.finish()
 
-    def save_model(self, name: str):
+    def save_model(self, name: str, data_path: str):
         """
         Save the model to a file.
         
         :param name: Name of the file to save the model to.
         :type name: str
         """
-        torch.save(self.state_dict(), f"{name}.pth")
+        path = os.path.join(data_path, f"{name}.pth")
+        torch.save(self.state_dict(), path)
 
         info = f"Model `{name}.pth` saved successfully!"
-        info += f"Path to model: {os.getcwd()}"
+        info += f"Path to model: {data_path}"
         print_box(info)
 
     def load_model(self, filename: str,  dir_ = "Default"):
@@ -213,27 +223,7 @@ class AttentionUNET(AttentionUnet, BaseModel):
         if dir_ == "Default":
             dir_ = os.path.join(os.getcwd(), "data", "saved_models")
 
-        self.load_state_dict(torch.load(os.path.join(dir_, filename), map_location=torch.device('cpu')))
+        self.load_state_dict(torch.load(os.path.join(dir_, f"{filename}.pth"), map_location=torch.device('cpu')))
 
         info = f"Model `{filename}` loaded successfully!"
-        print_box(info)
-
-    def save_train_val_loss(self, data_dir: str):
-        """
-        Save the training and validation loss.
-
-        :param data_dir: Directory to save the loss files.
-        :type data_dir: str
-        """
-        train_loss_path = os.path.join(data_dir, f"train_loss.pkl")
-        with open(train_loss_path, "wb") as file:
-            pickle.dump(self.train_loss, file)
-
-        info = f"Training Loss saved successfully in `{train_loss_path}`!"
-
-        val_loss_path = os.path.join(data_dir, f"val_loss.pkl")
-        with open(val_loss_path, "wb") as file:
-            pickle.dump(self.val_loss, file)
-
-        info += f"\nValidation Loss saved successfully in `{val_loss_path}`!"
         print_box(info)

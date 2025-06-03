@@ -1,3 +1,9 @@
+"""
+NOTE FOR USERS:
+
+This module serves only for the DRAGN project to specify filepaths and data availability for smoother data retrieval.
+**Deprecated:** Do not use this if your data is stored elsewhere or follows a different structure.
+"""
 import os
 import json
 

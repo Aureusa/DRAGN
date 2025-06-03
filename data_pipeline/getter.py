@@ -1,24 +1,65 @@
+"""
+NOTE FOR USERS:
+
+This module provides the `FilepathGetter` class, which is designed to work **exclusively**
+with the file naming conventions and directory structure described in the data database
+(`_telescopes_db.py`) of this package. 
+
+**Supported File Patterns:**
+- AGN-free images:         "_sn(\\d+)_.*?_(\\d+).fits"
+- AGN-contaminated images: "sn(\\d+)_.*?_(\\d+)_"
+- AGN fraction:            "_f(.*?)\\.fits"
+- Redshift:                "_sn(\\d{3})_.*?_(\\d+)\\.fits"
+
+These patterns are used to extract metadata and group files.
+If your data does **not** follow these exact patterns, the `FilepathGetter`
+class will not function correctly and may throw errors or fail to find files.
+
+**Data Source:**
+The data and its naming conventions are based on the following publication:
+    @misc{margalefbentabol2025agnhostgalaxy,
+          title={AGN -- host galaxy photometric decomposition using a fast,
+          accurate and precise deep learning approach}, 
+          author={Berta Margalef-Bentabol and Lingyu Wang and Antonio La Marca and Vicente Rodriguez-Gomez},
+          year={2025},
+          eprint={2410.01437},
+          archivePrefix={arXiv},
+          primaryClass={astro-ph.GA},
+          url={https://arxiv.org/abs/2410.01437}, 
+    }
+
+**Important:**
+- Only use this class with datasets that strictly follow the above naming conventions.
+- If you wish to use your own data, you must adapt your filenames to match these patterns or modify the code accordingly.
+- For further information about the data structure or to request access, please contact the authors of the above publication.
+"""
 import os
 import glob
 import re
 from collections import defaultdict
 
 from data_pipeline._telescopes_db import TELESCOPES_DB
+from loggers_utils import log_execution
 from utils import print_box
-
+from utils_utils.validation import validate_filename_pattern
 
 # Define the scratch dir to use in habrok
 SCRATCH_DIR = "/scratch"
 
 
 class FilepathGetter:
-    def __init__(self, telescope: str, redshift: list[str]|None = None, redshift_treshhold: float|None = None) -> None:
+    # TODO: REFACTOR the __init__
+    def __init__(self, path: str|None = None, telescope: str = "JWST", redshift: list[str]|None = None, redshift_treshhold: float|None = None) -> None:
         """
         Initialize the DataGetter class.
         This class is responsible for getting the filenames 
         from the telescope source path and grouping them by (snXXX, unique_id).
 
-        :param telescope: The name of the telescope to get data from.
+        :param path: The path to the data folder. If None, the default path will be used.
+        :type path: str, optional
+        :param telescope: The name of the telescope to get data from. This parameter
+        is depricated and its use is discouraged. Its functionality will be removed in the future.
+        It serves as a way to get the data from the database specific to the `DRAGN` project.
         :type telescope: str
         :param redshift: The list of redshift values to filter the data.
         :type redshift: list[str], optional
@@ -29,41 +70,49 @@ class FilepathGetter:
         :raises ValueError: If the telescope is not supported or if the redshift
         is not supported for the given telescope.
         """
-        if redshift_treshhold is not None:
+        if path is not None:
+            os.chdir(path)
+            self.fits_files = glob.glob("**/*.fits", recursive=True)
+        else:
+            if redshift_treshhold is not None:
+                if redshift is not None:
+                    redshift = None
+                    info = "`redshift_treshhold` takes priority over `redshift`!\n"
+                    info += "All files bellow the treshhold value will be collected."
+                    print_box(info)
+            if telescope not in TELESCOPES_DB:
+                raise ValueError(f"Telescope {telescope} not supported. Choose from {list(TELESCOPES_DB.keys())}.")
+            
+            # Get the data folder from the database
+            data_folder = TELESCOPES_DB[telescope]["folder"]
+
+            # Get the path to root folder
+            os.chdir("..")
+            os.chdir("..")
+
+            # Get the path to the telescope source path
+            telecope_source_path = os.path.join(SCRATCH_DIR, "s4683099", data_folder)
+
             if redshift is not None:
-                redshift = None
-                info = "`redshift_treshhold` takes priority over `redshift`!\n"
-                info += "All files bellow the treshhold value will be collected."
-                print_box(info)
-        if telescope not in TELESCOPES_DB:
-            raise ValueError(f"Telescope {telescope} not supported. Choose from {list(TELESCOPES_DB.keys())}.")
-        
-        # Get the data folder from the database
-        data_folder = TELESCOPES_DB[telescope]["folder"]
+                info = self._retrieve_files_from_snapnum_list(telescope, redshift, telecope_source_path)
+            elif redshift_treshhold is not None:
+                info = self._retrieve_files_with_z_treshhold(telescope, redshift_treshhold, telecope_source_path)
+            else: # Collect all the files from the telescope source path
+                info = "Retrieving the observations for all redshift values:\n"
 
-        # Get the path to root folder
-        os.chdir("..")
-        os.chdir("..")
+                self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
 
-        # Get the path to the telescope source path
-        telecope_source_path = os.path.join(SCRATCH_DIR, "s4683099", data_folder)
+                info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path}"
 
-        if redshift is not None:
-            info = self._retrieve_files_from_snapnum_list(telescope, redshift, telecope_source_path)
-        elif redshift_treshhold is not None:
-            info = self._retrieve_files_with_z_treshhold(telescope, redshift_treshhold, telecope_source_path)
-        else: # Collect all the files from the telescope source path
-            info = "Retrieving the observations for all redshift values:\n"
+            # Rebase to the current dir
+            os.chdir(os.path.expanduser("~"))
+            os.chdir(os.path.join(os.getcwd(), "Deep-AGN-Clean"))
 
-            self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
+            # Validate the filenames
+            for file in self.fits_files:
+                validate_filename_pattern(file, TELESCOPES_DB["FILENAME PATTERN"])
 
-            info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path}"
-
-        # Rebase to the current dir
-        os.chdir(os.path.expanduser("~"))
-        os.chdir(os.path.join(os.getcwd(), "Deep-AGN-Clean"))
-
-        print_box(info)
+            print_box(info)
 
     def _retrieve_files_with_z_treshhold(self, telescope: str, redshift_treshhold: float, telecope_source_path: str) -> str:
         """
@@ -149,6 +198,7 @@ class FilepathGetter:
 
         return info
 
+    @log_execution("Getting data from path...", "Data retrieval completed.")
     def get_data(self) -> tuple[dict, list]:
         """
         Get the data from the telescope source path and group them by (snXXX, unique_id).
@@ -165,8 +215,8 @@ class FilepathGetter:
         file_groups = defaultdict(list)
 
         # Regular expression to extract identifiers
-        pattern_agn = re.compile(rf"{TELESCOPES_DB['AGN_CONTAMINATION_PATTERN']}")
-        pattern_agn_free = re.compile(rf"{TELESCOPES_DB['AGN_FREE_PATERN']}")
+        pattern_agn = re.compile(rf"{TELESCOPES_DB['AGN CONTAMINATION PATTERN']}")
+        pattern_agn_free = re.compile(rf"{TELESCOPES_DB['AGN FREE PATTERN']}")
         
         # Set to store unique keys
         all_keys = set()

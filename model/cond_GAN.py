@@ -144,9 +144,8 @@ class cGAN(torch.nn.Module, BaseModel):
             lr,
             loss_function,
             num_epochs,
-            checkpoints: list[int] = [25],
-            wandb_project_name: str = "Deep-AGN-Clean",
-            wandb_entity: str = "myverynicemodel"
+            model_name: str = "Placeholder",
+            data_path: str = "data"
         ):
         """
         Train the model.
@@ -168,7 +167,7 @@ class cGAN(torch.nn.Module, BaseModel):
         :param wandb_entity: WandB entity name.
         :wandb_entity type: str
         """
-        run = wandb.init(project=wandb_project_name, name=wandb_entity)
+        run = wandb.init(project=model_name, name=model_name)
         # Define the device
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.to(device)
@@ -189,11 +188,11 @@ class cGAN(torch.nn.Module, BaseModel):
 
             epoch_loss_G = 0 
             epoch_loss_D = 0 
-            for inputs, targets, psf in train_loader:
+            for inputs, targets in train_loader:
                 # Move the data to the device
                 inputs = inputs.to(device)
                 targets = targets.to(device)
-                psf = psf.to(device)
+                psf = inputs - targets
 
                 # ------- Train the Discriminator -------
                 # Zero the gradients
@@ -252,11 +251,11 @@ class cGAN(torch.nn.Module, BaseModel):
 
             l1_loss = nn.L1Loss()
             with torch.no_grad():
-                for inputs, targets, psf in val_loader:
+                for inputs, targets in val_loader:
                     # Move the data to the device
                     inputs = inputs.to(device)
                     targets = targets.to(device)
-                    psf = psf.to(device)
+                    psf = inputs - targets
 
                     # Generate predictions
                     outputs = self.forward(inputs)
@@ -279,30 +278,37 @@ class cGAN(torch.nn.Module, BaseModel):
                 "val_loss": val_loss / len(val_loader)
             })
 
-            if epoch in checkpoints:
-                self.save_model(f"{wandb_entity}_epoch_{epoch}")
+            # Save the model
+            self.save_model(f"{model_name}_epoch", data_path)
+            info = f"Checkpoint model saved at epoch {epoch}!"
+            print_box(info)
 
-            print(f"Epoch Loss Generator: {epoch_loss_G / len(train_loader):.4f},"
-                  f"Epoch Loss Discriminator: {epoch_loss_D / len(train_loader):.4f}"
-                  f"Validation Loss: {val_loss / len(val_loader):.4f}")
+            # Info about the training
+            info = f"Epoch Loss Generator: {epoch_loss_G / len(train_loader):.4f}"
+            info += f"\nEpoch Loss Discriminator: {epoch_loss_D / len(train_loader):.4f}"
+            info += f"\nValidation Loss: {val_loss / len(val_loader):.4f}"
+            print_box(info)
             
         # Finish WandB run
         wandb.finish()
 
-    def save_model(self, name: str):
+    def save_model(self, name: str, data_path: str):
         """
         Save the model to a file.
         
         :param name: Name of the file to save the model to.
         :type name: str
         """
-        torch.save(self.D.state_dict(), f"discriminator_{name}.pth")
+        d_path = os.path.join(data_path, f"discriminator_{name}.pth")
+        g_path = os.path.join(data_path, f"generator_{name}.pth")
+
+        torch.save(self.D.state_dict(), d_path)
         info = f"Discriminator model `discriminator_{name}.pth` saved successfully!"
 
-        torch.save(self.G.state_dict(), f"generator_{name}.pth")
+        torch.save(self.G.state_dict(), g_path)
         info += f"\nGenerator model with generator_{name}.pth saved successfully!"
 
-        info += f"Path to model: {os.getcwd()}"
+        info += f"Path to model: {data_path}"
         print_box(info)
 
     def load_model(self, discriminator_name: str, generator_name: str,  dir_ = "Default"):
