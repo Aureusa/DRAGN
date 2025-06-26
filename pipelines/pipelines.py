@@ -1,132 +1,50 @@
-from model_utils.model_testing import ModelTester
-from model_utils.model_training import ModelTrainer
-from model_utils.loss_functions import _get_avaliable_loss_funcstions
-from model_utils.plotter import Plotter
-from model_utils.result_interpreter import ResultInterpreter
-
-from data_pipeline import (
-    GalaxyDataset,
-    FitsLoader,
-    _BaseTransform
-)
-
-from loggers_utils import TrainingLogger
-from utils import load_pkl_file
-
 import os
+import glob
+import numpy as np
+from tqdm import tqdm
 
+from model_testing import PAdict, ResultInterpreter, Plotter, Tester
+from loggers_utils import TrainingLogger
+from data_pipeline import _BaseDataset, _BaseTransform, _BaseLoader
+from utils import load_pkl_file, print_box
 
-AVALIABLE_LOSS_FUNCTIONS = list(_get_avaliable_loss_funcstions().keys())
-
-
-def training_pipeline(
-        model_type,
-        model_name,
-        telescope,
-        data_folder,
-        loss,
-        batch_size,
-        prefetch_factor,
-        num_workers,
-        lr,
-        **model_kwargs
-    ) -> None:
-    trainer = ModelTrainer(
-        model_type,
-        model_name,
-        telescope,
-        data_folder,
-        **model_kwargs,
+def plot_loss_pipeline(data_folder: str, filename: str, discriminator: bool = False, from_epoch: int = 0, to_epoch: int = -1) -> None:
+    logger = TrainingLogger(
+        save_dir=data_folder,
+        adverserial_logger=discriminator
     )
 
-    X_train, X_val, _, y_train, y_val, _ = trainer.load_data("jwst_full_data")
+    history = logger.history
 
-    train_loader, val_loader = trainer.forge_loaders(
-        X_train,
-        X_val,
-        y_train,
-        y_val,
-        dataset=GalaxyDataset,
-        loader=FitsLoader,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        prefetch_factor=prefetch_factor
+    train_loss = history["train_loss"][from_epoch:to_epoch]
+    val_loss = history["val_loss"][from_epoch:to_epoch]
+    best_val_loss = min(val_loss)
+
+    if discriminator:
+        train_loss = history["train_loss_D"][from_epoch:to_epoch]
+        val_loss = history["val_loss_D"][from_epoch:to_epoch]
+
+    plotter = Plotter()
+
+    plotter.plot_loss(
+        train_loss=train_loss,
+        val_loss=val_loss,
+        best_val_loss=best_val_loss,
+        filename=filename,
+        data_folder=data_folder
     )
-
-    trainer.train_model(
-        train_loader,
-        val_loader,
-        loss_name=loss,
-        lr=lr
-    )
-
-
-def finetunning_pipeline(
-        model_type,
-        model_name,
-        telescope,
-        data_folder,
-        loss,
-        batch_size,
-        prefetch_factor,
-        num_workers,
-        lr,
-        loading_params,
-        new_folder: str = "",
-        **model_kwargs
-    ) -> None:
-    trainer = ModelTrainer(
-        model_type=model_type,
-        model_name=model_name,
-        telescope=telescope,
-        data_folder=data_folder,
-        **model_kwargs,
-    )
-
-    X_train, X_val, _, y_train, y_val, _ = trainer.load_data("jwst_full_data")
-
-    train_loader, val_loader = trainer.forge_loaders(
-        X_train,
-        X_val,
-        y_train,
-        y_val,
-        dataset=GalaxyDataset,
-        loader=FitsLoader,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        prefetch_factor=prefetch_factor
-    )
-
-    if new_folder:
-        trainer.model.load_model(dir_ = os.path.join("data", data_folder), **loading_params)
-        trainer.data_folder = os.path.join("data", new_folder)
-
-        trainer.train_model(
-            train_loader,
-            val_loader,
-            loss_name=loss,
-            lr=lr
-        )
-    else:
-        trainer.fine_tune_model(
-            train_loader,
-            val_loader,
-            loss_name=loss,
-            lr=lr,
-            **loading_params
-        )
 
 def image_cleaner_pipeline(
         model_names: list[str],
         model_types: list[str],
         model_filenames: list[str],
-        data_folder: list[str],
-        dataset: list[GalaxyDataset],
-        transform: list[_BaseTransform|None],
-        loader: list[FitsLoader],
-        deep: list[bool],
+        data_folders: list[str],
+        datasets: list[_BaseDataset],
+        loaders: list[_BaseLoader],
+        transforms: list[_BaseTransform|None],
         n: int,
-        filename: str = "test_image",
+        test_data_path: str|None = "/home4/s4683099/Deep-AGN-Clean/data/jwst_full_data/test_data.pkl",
+        plots_filename: str = "test_image",
         show_real_min_infered: bool = False,
         f_agn: int|None = None,
         report: bool = False,
@@ -135,227 +53,373 @@ def image_cleaner_pipeline(
         model_names=model_names,
         model_types=model_types,
         model_filenames=model_filenames,
-        data_folder=data_folder,
-        dataset=dataset,
-        transform=transform,
-        loader=loader,
-        deep=deep
+        data_folder=data_folders,
+        dataset=datasets,
+        transform=transforms,
+        loader=loaders,
     )
-    sources_list, targets_list, cleaned_images_list, diffs_list, psfs_list = _clean_images(
-        model_names=model_names,
-        model_types=model_types,
-        model_filenames=model_filenames,
-        data_folder=data_folder,
-        dataset=dataset,
-        transform=transform,
-        loader=loader,
-        deep=deep,
-        n=n,
-        f_agn=f_agn
-    )
+    # Load the test data
+    X_test, y_test = load_pkl_file(test_data_path)
+
+    source_list = []
+    target_list = []
+    cleaned_images_list = []
+    psf_predicted_list = []
+    psfs_list = []
+
+    for i in range(len(model_names)):
+        model_type = model_types[i]
+        model_filename = model_filenames[i]
+        data_folder = data_folders[i]
+
+        transform = transforms[i] if transforms else None
+        dataset = datasets[i](source=X_test, target=y_test, transform=transform, training=False)
+        loader = loaders[i](dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
+        print(data_folder)
+        tester = Tester(
+            model_type=model_type,
+            model_filename=model_filename,
+            data_folder=data_folder,
+            test_loader=loader,
+            transform=transform,
+        )
+
+        (
+            source_arr,
+            target_arr,
+            cleaned_image_arr,
+            psf_predicted_arr,
+            psf_arr
+        ) = tester.clean_images(n=n, f_agn=f_agn)
+
+        source_list.append(source_arr)
+        target_list.append(target_arr)
+        cleaned_images_list.append(cleaned_image_arr)
+        psf_predicted_list.append(psf_predicted_arr)
+        psfs_list.append(psf_arr)
 
     plotter = Plotter()
     
     if report:
-        plotter.plot_cleaned_images_report(
-            sources=sources_list,
-            targets=targets_list,
+        plotter.grid_plot(
+            sources=source_list,
+            targets=target_list,
             outputs=cleaned_images_list,
             titles=model_names,
-            filename=filename,
+            filename=plots_filename,
+            data_folder=os.getcwd(),
             f_agn=f_agn,
+            save=True,
         )
     else:
-        plotter.plot_cleaned_images(
-            sources=sources_list,
-            targets=targets_list,
+        plotter.diagnostic_plot(
+            sources=source_list,
+            targets=target_list,
             outputs=cleaned_images_list,
-            diffs=diffs_list,
+            predicted_psfs=psf_predicted_list,
             psfs=psfs_list,
             titles=model_names,
-            filename=filename,
-            show_real_min_infered=show_real_min_infered
+            filename=plots_filename,
+            data_folder=os.getcwd(),
+            show_real_min_infered=show_real_min_infered,
+            save=True,
         )
 
-def psf_histogram_pipeline(
+# DEPRICATED: This function is not used anymore.
+def plot_gal_3dgal_psf():
+    from data_pipeline.galaxy_dataset import MockRealGalaxyDataset
+
+    real_images_path: str|None = "/scratch/s4683099/real_JWST/COSMOS-Web_cutouts_Zhuang2024"
+    fits_files = glob.glob(f"{real_images_path}/*.fits", recursive=True)
+    print_box(f"Found {len(fits_files)} .fits files in {real_images_path}")
+
+    X_test, y_test = load_pkl_file("/home4/s4683099/Deep-AGN-Clean/data/jwst_full_data/test_data.pkl")
+
+    dataset = MockRealGalaxyDataset(
+        real_images=fits_files,
+        source=X_test,
+        target=y_test,
+        training=False
+    )
+
+    psfs_list = []
+    real_gal_list = []
+    for i in range(len(fits_files)):
+        real_image_tensor, psf_tensor = dataset[i]
+        psfs_list.append(psf_tensor.cpu().numpy())
+        real_gal_list.append(real_image_tensor.cpu().numpy())
+
+    plotter = Plotter()
+
+    plotter.make_3d_galaxy_plot(real_gal=real_gal_list, psfs=psfs_list)
+
+def real_image_cleaner_pipeline(
         model_names: list[str],
         model_types: list[str],
         model_filenames: list[str],
-        data_folder: str,
-        dataset: list[GalaxyDataset],
-        transform: list[_BaseTransform|None],
-        loader: list[FitsLoader],
-        deep: list[bool],
+        data_folders: list[str],
+        datasets: list[_BaseDataset],
+        loaders: list[_BaseLoader],
+        transforms: list[_BaseTransform|None],
         n: int,
-        filename: str = "test_image",
-        test_set: bool = True
+        real_images_path: str|None = "/scratch/s4683099/real_JWST/COSMOS-Web_cutouts_Zhuang2024",
+        plots_filename: str = "real_images",
     ) -> None:
     _check_list_lengths(
         model_names=model_names,
         model_types=model_types,
         model_filenames=model_filenames,
-        data_folder=data_folder,
-        dataset=dataset,
-        transform=transform,
-        loader=loader,
-        deep=deep
+        data_folder=data_folders,
+        dataset=datasets,
+        transform=transforms,
+        loader=loaders,
     )
-    _, _, _, diffs_list, psfs_list = _clean_images(
-        model_names=model_names,
-        model_types=model_types,
-        model_filenames=model_filenames,
-        data_folder=data_folder,
-        dataset=dataset,
-        transform=transform,
-        loader=loader,
-        deep=deep,
-        n=n,
-        test_set=test_set
-    )
+    fits_files = glob.glob(f"{real_images_path}/*.fits", recursive=True)
+    print_box(f"Found {len(fits_files)} .fits files in {real_images_path}")
+
+    source_list = []
+    target_list = []
+    cleaned_images_list = []
+    frf_list = []
+
+    print("Real Data Analysis:")
+    import matplotlib.pyplot as plt
+    for i in range(len(model_names)):
+        model_type = model_types[i]
+        model_filename = model_filenames[i]
+        data_folder = data_folders[i]
+
+        transform = transforms[i] if transforms else None
+        dataset = datasets[i](source=fits_files, target=fits_files, transform=transform, training=False)
+        loader = loaders[i](dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
+
+        tester = Tester(
+            model_type=model_type,
+            model_filename=model_filename,
+            data_folder=data_folder,
+            test_loader=loader,
+            transform=transform,
+        )
+
+        (
+            source_arr,
+            target_arr,
+            cleaned_image_arr,
+            _,
+            _
+        ) = tester.clean_images(f_agn=None, n=n)
+
+        source_list.append(source_arr)
+        cleaned_images_list.append(cleaned_image_arr)
+        target_list.append(target_arr)
+
+        predicted_gal_fluxes = np.sum(cleaned_image_arr, axis=(1, 2, 3))  # (B,)
+        real_gal_fluxes = np.sum(source_arr, axis=(1, 2, 3))  # (B,)
+        frf = predicted_gal_fluxes / real_gal_fluxes - 1
+
+        # if i == 0:
+        #     plt.hist(real_gal_fluxes, bins=10, alpha=0.5, label="Real Galaxy Fluxes", density=True)
+        #     plt.legend()
+        #     plt.xlabel("Fluxes")
+        #     plt.ylabel("PDF")
+        #     plt.savefig(os.path.join(os.getcwd(), "real_vs_mock_flux_histogram.png"))
+        #     plt.close()
+
+        print_box(f"Model: {model_names[i]}\nMean FRF: {np.mean(frf):.4f}\nMedian FRF: {np.median(frf):.4f}\nStd FRF: {np.std(frf):.4f}")
+
+        plt.hist(frf, bins=10, alpha=0.5, label=model_names[i], density=True)
+
+    plt.legend()
+    plt.xlabel("FCM")
+    plt.ylabel("PDF")
+    plt.savefig(os.path.join(os.getcwd(), "real_images_frf_histogram.png"))
+    plt.close()
 
     plotter = Plotter()
-
-    plotter.plot_psf_hist(
-        psfs=psfs_list,
-        infered_psfs=diffs_list,
-        titles=model_names,
-        filename=filename
-    )
     
-def psf_plot_3d_pipeline(
+    plotter.grid_plot(
+        sources=source_list,
+        targets=None,
+        outputs=cleaned_images_list,
+        titles=model_names,
+        filename=plots_filename,
+        data_folder=os.getcwd(),
+        f_agn=None,
+        save=True,
+    )
+
+# DEPRICATED: This function is not used anymore.
+def mockreal_image_cleaner_pipeline(
         model_names: list[str],
         model_types: list[str],
         model_filenames: list[str],
-        data_folder: str,
-        dataset: list[GalaxyDataset],
-        transform: list[_BaseTransform|None],
-        loader: list[FitsLoader],
-        deep: list[bool],
+        data_folders: list[str],
+        datasets: list[_BaseDataset],
+        loaders: list[_BaseLoader],
+        transforms: list[_BaseTransform|None],
         n: int,
-        filename: str = "test_image",
-        show_real_min_infered: bool = False,
-        test_set: bool = True
+        real_images_path: str|None = "/scratch/s4683099/real_JWST/COSMOS-Web_cutouts_Zhuang2024",
+        plots_filename: str = "real_images",
     ) -> None:
     _check_list_lengths(
         model_names=model_names,
         model_types=model_types,
         model_filenames=model_filenames,
-        data_folder=data_folder,
-        dataset=dataset,
-        transform=transform,
-        loader=loader,
-        deep=deep
+        data_folder=data_folders,
+        dataset=datasets,
+        transform=transforms,
+        loader=loaders,
     )
-    _, _, _, diffs_list, psfs_list = _clean_images(
-        model_names=model_names,
-        model_types=model_types,
-        model_filenames=model_filenames,
-        data_folder=data_folder,
-        dataset=dataset,
-        transform=transform,
-        loader=loader,
-        deep=deep,
-        n=n,
-        test_set=test_set
-    )
+    from data_pipeline.galaxy_dataset import MockRealGalaxyDataset
+    fits_files = glob.glob(f"{real_images_path}/*.fits", recursive=True)
+    print_box(f"Found {len(fits_files)} .fits files in {real_images_path}")
+
+    # Load the test data
+    X_test, y_test = load_pkl_file("/home4/s4683099/Deep-AGN-Clean/data/jwst_full_data/test_data.pkl")
+
+    source_list = []
+    target_list = []
+    cleaned_images_list = []
+
+    for i in range(len(model_names)):
+        model_type = model_types[i]
+        model_filename = model_filenames[i]
+        data_folder = data_folders[i]
+
+        transform = transforms[i] if transforms else None
+        #dataset = datasets[i](source=fits_files, target=fits_files, transform=transform, training=False)
+        dataset = MockRealGalaxyDataset(real_images=fits_files, source=X_test, target=y_test, transform=transform, training=False)
+        loader = loaders[i](dataset=dataset, batch_size=1, shuffle=False, num_workers=0)
+
+        tester = Tester(
+            model_type=model_type,
+            model_filename=model_filename,
+            data_folder=data_folder,
+            test_loader=loader,
+            transform=transform,
+        )
+
+        (
+            source_arr,
+            target_arr,
+            cleaned_image_arr,
+            _,
+            _
+        ) = tester.clean_images(f_agn=[70], n=n)
+
+        source_list.append(source_arr)
+        cleaned_images_list.append(cleaned_image_arr)
+        target_list.append(target_arr)
 
     plotter = Plotter()
-
-    plotter.plot_psf_3d(
-        psfs=psfs_list,
-        infered_psfs=diffs_list,
-        titles=model_names,
-        filename=filename,
-        show_real_min_infered=show_real_min_infered
-    )
-
-def plot_loss_pipeline(path: str, model_name: str, discriminator: bool = False) -> None:
-    logger = TrainingLogger(
-        save_dir=path,
-        adverserial_logger=discriminator
-    )
-
-    history = logger.history
-
-    train_loss = history["train_loss"]
-    val_loss = history["val_loss"]
-    best_val_loss = history["best_val_loss"]
-
-    if discriminator:
-        train_loss = history["train_loss_D"]
-        val_loss = history["val_loss_D"]
-
-    plotter = Plotter()
-
-    plotter.plot_loss(
-        train_loss=train_loss,
-        val_loss=val_loss,
-        best_val_loss=best_val_loss,
-        model_name=model_name,
-        filepath=path
-    )
-
-
-def compare_performance_analysis_pipeline(
-        data_folder: list[str],
-        model_names: list[str],
-        filenames: list[str],
-        latex: bool = False,
-    ) -> None:
-    if len(data_folder) != len(model_names) or len(data_folder) != len(filenames):
-        raise ValueError("data_folder, model_names, and filenames must have the same length.")
     
-    pa_list = []
-    for i in range(len(data_folder)):
-        filepath = os.path.join(data_folder[i], filenames[i])
-
-        pa = load_pkl_file(filepath)
-        pa_list.append(pa)
-        
-    interpeter = ResultInterpreter()
-
-    interpeter.compare_model_performance(
-        data_list=pa_list,
-        verbose=True,
-        latex=latex,
+    plotter.grid_plot(
+        sources=source_list,
+        targets=target_list,
+        outputs=cleaned_images_list,
+        titles=model_names,
+        filename=plots_filename,
+        data_folder=os.getcwd(),
+        f_agn=None,
+        save=True,
     )
 
+def plot_pixel_hist(
+        real_images_path: str|None = "/scratch/s4683099/real_JWST/COSMOS-Web_cutouts_Zhuang2024",
+        test_data_path_pkl: str|None = "/home4/s4683099/Deep-AGN-Clean/data/jwst_full_data/test_data.pkl",
+        plots_filename: str = "plot_dist_hist",
+    ) -> None:
+    from data_pipeline.galaxy_container import GalaxyContainer
+    import torch
+
+    # Get the list of .fits files in the specified directory
+    # must be real images path
+    fits_files = glob.glob(f"{real_images_path}/*.fits", recursive=True)
+    print_box(f"Found {len(fits_files)} .fits files in {real_images_path}")
+
+    # Load the test data
+    X_test, y_test = load_pkl_file(test_data_path_pkl)
+
+    # Create a dataset and loader for the real images
+    dataset_real = GalaxyContainer(filepaths=fits_files)
+    dataset_mock = GalaxyContainer(filepaths=X_test)
+    dataset_mock.filter_by_f_agn_list(f_agn_list=[10, 30, 44, 65, 70, 90], n=1360)  # Filter to match the real images
+    
+    # Extract the real and mock data
+    real_data = []
+    mock_data = []
+    for i in tqdm(range(len(dataset_real))):
+        real_data.append(dataset_real[i])
+
+    for i in tqdm(range(len(dataset_mock))):
+        mock_data.append(dataset_mock[i])
+
+    real_data = torch.stack(real_data, dim=0)
+    mock_data = torch.stack(mock_data, dim=0)
+
+    # Flatten the data for histogram plotting
+    real_data_flat = real_data.flatten().numpy()
+    mock_data_flat = mock_data.flatten().numpy()
+
+    # Create a Plotter instance
     plotter = Plotter()
 
-    plotter.make_trend_plots(data_list=pa_list, filepath=os.getcwd())
-
+    # Plot the histograms for real and mock data
+    plotter.plot_two_histograms(
+        arr1=real_data_flat,
+        arr2=mock_data_flat,
+        label1="Real Images",
+        label2="Mock Images",
+        title="Pixel Value Distribution",
+        filename=plots_filename,
+        data_folder=os.getcwd(),
+        save=True,
+    )
 
 def performance_analysis_pipeline(
         data_folder: str,
-        model_filename: str,
         model_name: str,
-        filename: str,
-        latex: bool = False
+        pa_filename: str,
+        verbose: bool = True,
+        latex: bool = False,
     ):
-    filepath = os.path.join(data_folder, filename)
+    filepath = os.path.join(data_folder, pa_filename)
 
-    pa = load_pkl_file(filepath)
+    padict: PAdict = load_pkl_file(filepath)
 
     plotter = Plotter()
 
-    real_psf_fluxes, predicted_psf_fluxes, real_gal_fluxes, predicted_gal_fluxes = pa.get_all_fluxes_np()
-
-    flux_data = pa.get_flux_data()
+    real_psf_fluxes, predicted_psf_fluxes, real_gal_fluxes, predicted_gal_fluxes = padict.get_all_fluxes_np()
 
     interpeter = ResultInterpreter()
 
     interpeter.interpret_performance_analyis(
-        data=pa,
-        model_name=model_filename,
-        verbose=True,
-        latex=latex
+        data=padict,
+        model_name=model_name,
+        verbose=verbose,
+        latex=latex,
+    )
+
+    df_psf, df_gal = interpeter.frf_flux_correlation(
+        data=padict,
+        model_name=model_name,
+        verbose=verbose,
+        latex=latex,
+    )
+
+    interpeter.compare_model_performance(
+        data_list=[padict],
+        verbose=verbose,
+        latex=latex,
     )
 
     plotter.make_2d_histogram(
         real_fluxes=real_psf_fluxes,
         predicted_fluxes=predicted_psf_fluxes,
         histogram_filename="psf_flux_hist",
-        histogram_datafolder=data_folder,
+        data_folder=data_folder,
+        x_label="Real AGN Flux (Jy)",
+        y_label="Predicted AGN Flux (Jy)",
         title=f"Real vs Predicted PSF Flux for {model_name}",
     )
 
@@ -363,76 +427,96 @@ def performance_analysis_pipeline(
         real_fluxes=real_gal_fluxes,
         predicted_fluxes=predicted_gal_fluxes,
         histogram_filename="gal_flux_hist",
-        histogram_datafolder=data_folder,
-        x_label="Real Galaxy Flux",
-        y_label="Predicted Galaxy Flux",
+        data_folder=data_folder,
+        x_label="Real Galaxy Flux (Jy)",
+        x_y_lim=40000,
+        y_label="Predicted Galaxy Flux (Jy)",
         title=f"Real vs Predicted Galaxy Flux for {model_name}",
-        gal=True
     )
 
-    plotter.make_trend_plots(data_list=[pa], filepath=data_folder)
+    plotter.make_frf_flux_correlation_plot(
+        df_psf_list=[df_psf],
+        df_gal_list=[df_gal],
+        data_folder=data_folder,
+        model_names=[model_name],
+        filename=model_name.lower().replace(" ", "_"),
+    )
 
-def _clean_images(
-        model_names: list[str],
-        model_types: list[str],
-        model_filenames: list[str],
-        data_folder: list[str],
-        dataset: list[GalaxyDataset],
-        transform: list[_BaseTransform|None],
-        loader: list[FitsLoader],
-        deep: list[bool],
-        n: int,
-        test_set: bool = True,
-        f_agn: int|None = None
-    ):
-    sources_list = []
-    targets_list = []
-    cleaned_images_list = []
-    diffs_list = []
-    psfs_list = []
-    for i in range(len(model_names)):
-        if deep[i]:
-            tester = ModelTester(
-                model_name=model_names[i],
-                model_type=model_types[i],
-                model_filename=model_filenames[i],
-                data_folder=data_folder[i],
-                dataset=dataset[i],
-                transform=transform[i],
-                loader=loader[i],
-                channels=(32, 64, 128, 256),
-            )
-        else:
-            tester = ModelTester(
-                model_name=model_names[i],
-                model_type=model_types[i],
-                model_filename=model_filenames[i],
-                data_folder=data_folder[i],
-                dataset=dataset[i],
-                transform=transform[i],
-                loader=loader[i],
-            )
+    plotter.make_trend_plots_fagn(pa_list=[padict], model_names=[model_name], data_folder=data_folder)
 
-        source_arr, target_arr, cleaned_image_arr, diff_predicted_arr, psf_arr = tester.clean_n_images(n=n, test_set=test_set, f_agn=f_agn)
+    plotter.flux_histogram(
+        fluxes=real_psf_fluxes,
+        title="Real AGN Flux Histogram",
+        data_folder=os.path.join(data_folder, "histograms"),
+        filename="agn_flux_histogram",
+    )
 
-        sources_list.append(source_arr)
-        targets_list.append(target_arr)
-        cleaned_images_list.append(cleaned_image_arr)
-        diffs_list.append(diff_predicted_arr)
-        psfs_list.append(psf_arr)
-
-    return sources_list, targets_list, cleaned_images_list, diffs_list, psfs_list
+    plotter.flux_histogram(
+        fluxes=real_gal_fluxes,
+        title="Real Galaxy Flux Histogram",
+        data_folder=os.path.join(data_folder, "histograms"),
+        filename="gal_flux_histogram",
+    )
 
 def _check_list_lengths(
         model_names: list[str],
         model_types: list[str],
         model_filenames: list[str],
         data_folder: list[str],
-        dataset: list[GalaxyDataset],
+        dataset: list[_BaseDataset],
         transform: list[_BaseTransform|None],
-        loader: list[FitsLoader],
-        deep: list[bool]
+        loader: list[_BaseLoader]
     ) -> None:
-    if not all(len(lst) == len(model_names) for lst in [model_types, model_filenames, data_folder, dataset, transform, loader, deep]):
+    if not all(len(lst) == len(model_names) for lst in [model_types, model_filenames, data_folder, dataset, transform, loader]):
         raise ValueError("All lists must have the same length.")
     
+
+def compare_performance_analysis_pipeline(
+        data_folders: list[str],
+        model_names: list[str],
+        pa_filenames: list[str],
+        data_folder: str = os.getcwd(),
+        verbose: bool = True,
+        latex: bool = False,
+    ) -> None:
+    if len(data_folders) != len(model_names) or len(data_folders) != len(pa_filenames):
+        raise ValueError("data_folders, model_names, and filenames must have the same length.")
+    
+    interpeter = ResultInterpreter()
+    
+    df_psf_list = []
+    df_gal_list = []
+    pa_list = []
+    for i in range(len(data_folders)):
+        filepath = os.path.join(data_folders[i], pa_filenames[i])
+        pa = load_pkl_file(filepath)
+
+        df_psf, df_gal = interpeter.frf_flux_correlation(
+            data=pa,
+            model_name=model_names[i],
+            verbose=False,
+            latex=False,
+        )
+
+        pa_list.append(pa)
+        df_psf_list.append(df_psf)
+        df_gal_list.append(df_gal)
+
+    interpeter.compare_model_performance(
+        data_list=pa_list,
+        verbose=verbose,
+        latex=latex,
+    )
+
+    plotter = Plotter()
+
+    plotter.make_trend_plots_fagn(pa_list=pa_list, model_names=model_names, data_folder=data_folder)
+    
+    # DEPRICATED: This function is not used anymore.
+    # plotter.make_frf_flux_correlation_plot(
+    #     df_psf_list=df_psf_list,
+    #     df_gal_list=df_gal_list,
+    #     data_folder=data_folder,
+    #     model_names=model_names,
+    #     filename="comparison",
+    # )

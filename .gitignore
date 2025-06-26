@@ -2,7 +2,6 @@
 *vscode
 *__pycache__
 *__MACOSX
-data/
 wandb/
 slurm/
 jobscript*

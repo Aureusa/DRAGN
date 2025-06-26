@@ -22,14 +22,77 @@ expected input/output structure or modify the loader accordingly.
 - For more information about the data structure, refer to the documentation or
 contact the maintainers.
 """
+import torch
 from torch.utils.data._utils.collate import default_collate
 from torch.utils.data import DataLoader
 
 from data_pipeline.galaxy_dataset import _BaseDataset
+from data_pipeline.transforms import _BaseTransform
 from utils_utils.validation import validate_type
 
 
-class FitsLoader(DataLoader):
+class _BaseLoader(DataLoader):
+    """
+    Base class for custom DataLoaders in the Deep-AGN-Clean project.
+    
+    This class is intended to be extended by specific DataLoader implementations
+    that handle different types of datasets, such as FITS files or other formats.
+    It provides a common interface and structure for custom DataLoaders.
+    """
+    def __init__(self, dataset, **kwargs):
+        """
+        Initialize the base DataLoader with the given dataset.
+        
+        :param dataset: The dataset to load.
+        :type dataset: _BaseDataset
+        :param args: Additional positional arguments for DataLoader.
+        :param kwargs: Additional keyword arguments for DataLoader.
+        """
+        super().__init__(dataset=dataset, **kwargs)
+        validate_type(dataset, _BaseDataset)
+
+    def __str__(self) -> str:
+        """
+        Return a string representation of the BaseLoader.
+        
+        :return: String representation of the BaseLoader.
+        :rtype: str
+        """
+        info = "Loader Information:\n"
+        info = f"Batch size: {self.batch_size}\n"
+        # Check if using RandomSampler (shuffle=True) or SequentialSampler (shuffle=False)
+        from torch.utils.data import RandomSampler
+        info += f"Shuffle: {isinstance(self.sampler, RandomSampler)}\n"
+        info += f"Number of workers: {self.num_workers}\n"
+        info += f"Prefetch factor: {self.prefetch_factor}\n"
+        info += f"Dataset transform: {self.dataset.transform}\n"
+        info += f"Training mode: {self.dataset.training}\n"
+        return info
+
+    def get_kwargs(self) -> str:
+        """
+        Get the keyword arguments used to initialize the DataLoader.
+        This method returns a dictionary containing the parameters
+        used to create the DataLoader instance, such as batch size,
+        shuffle status, number of workers, and prefetch factor.
+        """
+        batch_size = self.batch_size
+        from torch.utils.data import RandomSampler
+        shuffle = isinstance(self.sampler, RandomSampler)
+        num_workers = self.num_workers
+        prefetch_factor = self.prefetch_factor
+    
+        kwargs = {
+            "batch_size": batch_size,
+            "shuffle": shuffle,
+            "num_workers": num_workers,
+            "prefetch_factor": prefetch_factor
+        }
+        return kwargs
+
+
+
+class FitsLoader(_BaseLoader):
     """
     Custom DataLoader that uses a custom collate function to handle
     different data types in the dataset.
@@ -45,7 +108,6 @@ class FitsLoader(DataLoader):
             shuffle: bool = False,
             num_workers: int = 0,
             prefetch_factor: int|None = None,
-            *args,
             **kwargs
         ):
         """
@@ -72,11 +134,8 @@ class FitsLoader(DataLoader):
             shuffle=shuffle,
             num_workers=num_workers,
             prefetch_factor=prefetch_factor,
-            *args,
             **kwargs
         )
-        validate_type(dataset, _BaseDataset)
-        
         if dataset.training is False:
             self.collate_fn = self._custom_collate
 
@@ -107,10 +166,26 @@ class FitsLoader(DataLoader):
         # Use default_collate to stack tensors
         images = default_collate(images)
         targets = default_collate(targets)
+        stats = self._collate_normalization_params(stats)
 
-        if stats is not None:
-            stats = list(stats)  # Create a list of the custom class instances
-            return images, targets, stats
-        else:
-            return images, targets, None
+        return images, targets, stats
+        
+    def _collate_normalization_params(self, stats_list):
+        if any(s is None for s in stats_list):
+            return None
+
+        # Get all parameter keys from the first instance
+        keys = stats_list[0].params.keys()
+        stacked_params = {}
+
+        # Get the type of the first stats instance
+        stats_type = type(stats_list[0])
+
+        for key in keys:
+            # Extract and squeeze the leading batch dim if present
+            tensors = [s[key].squeeze(0) if s[key].shape[0] == 1 else s[key] for s in stats_list]
+            # Stack along batch dimension
+            stacked_params[key] = torch.stack(tensors, dim=0)  # (B, C, H, W)
+
+        return stats_type(**stacked_params)
         

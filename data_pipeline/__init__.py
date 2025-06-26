@@ -70,7 +70,7 @@ from data_pipeline.galaxy_dataset import (
     GalaxyDataset
 )
 from data_pipeline.getter import FilepathGetter
-from data_pipeline.loaders import FitsLoader
+from data_pipeline.loaders import _BaseLoader, FitsLoader
 from data_pipeline.transforms import (
     _BaseTransform,
     PerImageMinMax,

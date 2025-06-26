@@ -13,3 +13,5 @@ botorch==0.13.0
 seaborn==0.13.2
 torchvision==0.21.0
 torchmetrics==1.7.1
+monai[einops]
+jupyter==1.1.1

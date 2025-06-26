@@ -1,3 +1,11 @@
+"""
+NOTE FOR USERS:
+
+STILL IN DEVELOPMENT. DEPRICATED
+This .py file contains basic utility functions for the DRAGN project which will be
+moved to the `utils_utils` module in the future.
+"""
+
 import os
 import pickle as pkl
 from typing import Any
@@ -39,6 +47,9 @@ def load_pkl_file(full_filepath: str) -> Any:
     :return: The data loaded from the pickle file.
     :rtype: Any
     """
+    if not full_filepath.endswith(".pkl"):
+        full_filepath += ".pkl"
+        
     with open(full_filepath, "rb") as file:
         data = pkl.load(file)
     return data
@@ -46,7 +57,7 @@ def load_pkl_file(full_filepath: str) -> Any:
 def save_pkl_file(data: Any, full_filepath: str):
     """
     Save data to a pickle file at the specified path.
-
+		
     :param data: The data to be saved.
     :type data: Any
     :param full_filepath: The full path where the pickle file will be saved.

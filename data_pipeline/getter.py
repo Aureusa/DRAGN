@@ -73,46 +73,53 @@ class FilepathGetter:
         if path is not None:
             os.chdir(path)
             self.fits_files = glob.glob("**/*.fits", recursive=True)
-        else:
-            if redshift_treshhold is not None:
-                if redshift is not None:
-                    redshift = None
-                    info = "`redshift_treshhold` takes priority over `redshift`!\n"
-                    info += "All files bellow the treshhold value will be collected."
-                    print_box(info)
-            if telescope not in TELESCOPES_DB:
-                raise ValueError(f"Telescope {telescope} not supported. Choose from {list(TELESCOPES_DB.keys())}.")
-            
-            # Get the data folder from the database
-            data_folder = TELESCOPES_DB[telescope]["folder"]
 
-            # Get the path to root folder
-            os.chdir("..")
-            os.chdir("..")
+            info = f"Found {len(self.fits_files)} .fits files in {path}"
 
-            # Get the path to the telescope source path
-            telecope_source_path = os.path.join(SCRATCH_DIR, "s4683099", data_folder)
-
-            if redshift is not None:
-                info = self._retrieve_files_from_snapnum_list(telescope, redshift, telecope_source_path)
-            elif redshift_treshhold is not None:
-                info = self._retrieve_files_with_z_treshhold(telescope, redshift_treshhold, telecope_source_path)
-            else: # Collect all the files from the telescope source path
-                info = "Retrieving the observations for all redshift values:\n"
-
-                self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
-
-                info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path}"
-
-            # Rebase to the current dir
-            os.chdir(os.path.expanduser("~"))
-            os.chdir(os.path.join(os.getcwd(), "Deep-AGN-Clean"))
-
-            # Validate the filenames
             for file in self.fits_files:
                 validate_filename_pattern(file, TELESCOPES_DB["FILENAME PATTERN"])
 
             print_box(info)
+            return
+        if redshift_treshhold is not None:
+            if redshift is not None:
+                redshift = None
+                info = "`redshift_treshhold` takes priority over `redshift`!\n"
+                info += "All files bellow the treshhold value will be collected."
+                print_box(info)
+        if telescope not in TELESCOPES_DB:
+            raise ValueError(f"Telescope {telescope} not supported. Choose from {list(TELESCOPES_DB.keys())}.")
+        
+        # Get the data folder from the database
+        data_folder = TELESCOPES_DB[telescope]["folder"]
+
+        # Get the path to root folder
+        os.chdir("..")
+        os.chdir("..")
+
+        # Get the path to the telescope source path
+        telecope_source_path = os.path.join(SCRATCH_DIR, "s4683099", data_folder)
+
+        if redshift is not None:
+            info = self._retrieve_files_from_snapnum_list(telescope, redshift, telecope_source_path)
+        elif redshift_treshhold is not None:
+            info = self._retrieve_files_with_z_treshhold(telescope, redshift_treshhold, telecope_source_path)
+        else: # Collect all the files from the telescope source path
+            info = "Retrieving the observations for all redshift values:\n"
+
+            self.fits_files = glob.glob(f"{telecope_source_path}/**/*.fits", recursive=True)
+
+            info += f"Found {len(self.fits_files)} .fits files in {telecope_source_path}"
+
+        # Rebase to the current dir
+        os.chdir(os.path.expanduser("~"))
+        os.chdir(os.path.join(os.getcwd(), "Deep-AGN-Clean"))
+
+        # Validate the filenames
+        for file in self.fits_files:
+            validate_filename_pattern(file, TELESCOPES_DB["FILENAME PATTERN"])
+
+        print_box(info)
 
     def _retrieve_files_with_z_treshhold(self, telescope: str, redshift_treshhold: float, telecope_source_path: str) -> str:
         """

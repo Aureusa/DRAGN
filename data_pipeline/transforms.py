@@ -1,15 +1,50 @@
 """
 NOTE FOR USERS:
 
-This module contains image transformation and normalization
-utilities for AGN/galaxy datasets.
-**Deprecated:** None of the current models in this package use
-these transformations.
-You likely do not need to use or modify this file for standard workflows.
+This module provides transformation and normalization
+utilities for AGN/galaxy datasets. The main classes here implement
+per-image normalization transforms that operate on PyTorch tensors 
+with shape (B, C, H, W), where B is batch size, C is channels,
+and H, W are spatial dimensions.
+
+**How these methods work:**
+- Each normalization transform is a callable class that takes
+  a tensor input of shape (B, C, H, W)
+  and returns a tuple: (normalized_tensor, NormalizationParams).
+- The `NormalizationParams` class stores the parameters
+  (mean/std or min/max) used for normalization, allowing you to later
+  invert (denormalize) the transformation using the `inverse` method.
+
+**Available normalizations:**
+- `PerImageNormalize`: Normalizes each image in the batch by subtracting
+  its mean and dividing by its standard deviation.
+- `PerImageMinMax`: Normalizes each image in the batch to the [0, 1]
+  range using its own min and max.
+
+**NormalizationParams:**
+- This is a simple container for the normalization parameters
+  (mean, std, min, max, etc.) for each image.
+- It allows you to easily retrieve these parameters for denormalization.
+
+**Input shape:**
+- All transforms expect input tensors of shape (B, C, H, W).
+
+**Example usage:**
+    from data_pipeline.transforms import PerImageNormalize
+
+    transform = PerImageNormalize()
+
+    # images: torch.Tensor of shape (B, C, H, W)
+    normalized, norm_params = transform(images)
+    restored = transform.inverse(normalized, norm_params)
+
+Use these transforms to preprocess your data before training or evaluation,
+and to invert normalization for visualization or metric calculation.
 """
 from abc import ABC, abstractmethod
 from typing import Any
 import numpy as np
+import torch
 
 
 class NormalizationParams:
@@ -29,6 +64,15 @@ class NormalizationParams:
         :type kwargs: dict
         """
         self.params = kwargs
+
+    def __str__(self):
+        """
+        String representation of the NormalizationParams object.
+
+        :return: String representation of the NormalizationParams.
+        :rtype: str
+        """
+        return str(self.params)
 
     def get(self, key: str, default: Any = None):
         """
@@ -70,157 +114,103 @@ class _BaseTransform(ABC):
     Base class for all transforms.
     """
     @abstractmethod
-    def __call__(self, img: np.ndarray) -> tuple[np.ndarray, NormalizationParams]:
+    def __call__(self, input: torch.Tensor) -> tuple[torch.Tensor, NormalizationParams]:
         """
-        Apply the transform to the image.
+        Apply the transform to the input.
 
-        :param img: Image to be transformed.
-        :type img: np.ndarray
+        :param input: to be transformed. The shape has to be
+        (B, C, H, W).
+        :type input: torch.Tensor
         :return: Transformed image.
-        :rtype: np.ndarray
+        :rtype: torch.Tensor
         """
         pass
 
     @abstractmethod
-    def inverse(self, img: np.ndarray, params: NormalizationParams) -> np.ndarray:
+    def inverse(self, input: torch.Tensor, params: NormalizationParams) -> torch.Tensor:
         """
         Inverse the transform.
 
-        :param img: Image to be inversed.
-        :type img: np.ndarray
+        :param input: nromalized input to be inversed. The shape has to be
+        (B, C, H, W).
+        :type input: torch.Tensor
         :param params: Parameters used for the inverse transform.
-        :type params: Any
-        :return: Inversed image.
-        :rtype: np.ndarray
-        """
-        pass
-
-    @abstractmethod
-    def batched_inverse(self, img: np.ndarray, params_list: list[NormalizationParams]) -> np.ndarray:
-        """
-        Inverse the transform for a batch of images.
-
-        :param img: Batch of images to be inversed.
-        :type img: np.ndarray
-        :param params_list: List of parameters used for the inverse transform.
-        :type params_list: list
-        :return: Inversed batch of images.
-        :rtype: np.ndarray
+        :type params: NormalizationParams
+        :return: Inversed transform input.
+        :rtype: torch.Tensor
         """
         pass
 
 
 class PerImageNormalize(_BaseTransform):
     """
-    Normalize the image by subtracting the mean and dividing by the standard deviation:
-        normalized = (img - mean) / std
+    Normalize the by subtracting the mean and dividing by the standard deviation:
+        normalized = (input - mean) / std
     """
-    def __call__(self, img: np.ndarray) -> np.ndarray:
+    def __call__(self, input: torch.Tensor) -> torch.Tensor:
         """
-        Normalize the image by subtracting the mean and dividing by the standard deviation.
-        This method assumes that the input image is in the format (H, W) or (H, W, C).
+        Normalize the input, this method assumes that it has a shape (B, C, H, W).
 
-        :param img: Image to be normalized.
-        :type img: np.ndarray
-        :return: Normalized image and NormalizationParams containing mean and std.
-        :rtype: tuple[np.ndarray, NormalizationParams]
+        :param input: input to be normalized.
+        :type input: torch.Tensor
+        :return: Normalized and NormalizationParams containing mean and std.
+        :rtype: tuple[torch.Tensor, NormalizationParams]
         """
-        mean = img.mean()
-        std = img.std()
-        normalized = (img - mean) / std
+        mean = torch.mean(input, dim=(1,2,3), keepdim=True) # shape (B, C, 1, 1)
+        std = torch.std(input, dim=(1,2,3), keepdim=True) # shape (B, C, 1, 1)
+
+        normalized = (input - mean) / (std + 1e-8) # shape (B, C, H, W)
         return normalized, NormalizationParams(mean=mean, std=std)
     
-    def batched_inverse(self, img: np.ndarray, params_list: list[NormalizationParams]) -> np.ndarray:
+    def inverse(self, input: torch.Tensor, params: NormalizationParams) -> torch.Tensor:
         """
-        Inverse normalization for a batch of images.
-        This method assumes that the input image is in the format (B, H, W)
+        Inverse the normalization by multiplying by std and adding mean.
+        This method assumes that the input is in the format (B, C, H, W).
 
-        :param img: Batch of images to denormalize.
-        :type img: np.ndarray
-        :param params_list: List of NormalizationParams objects
-        containing mean and std for each image.
-        :type params_list: list[NormalizationParams]
-        :return: Denormalized batch of images.
-        :rtype: np.ndarray
+        :param input: Normalized input to be denormalized.
+        :type input: torch.Tensor
+        :param params: NormalizationParams containing mean and std for the image.
+        :type params: NormalizationParams
+        :return: Denormalized images.
+        :rtype: torch.Tensor
         """
-        # Ensure params is a list of NormalizationParams
-        if not isinstance(params_list, list) or not all(isinstance(p, NormalizationParams) for p in params_list):
-            raise ValueError("params must be a list of NormalizationParams objects")
-        
-        # Ensure img is a numpy array
-        if not isinstance(img, np.ndarray):
-            raise ValueError("img must be a numpy array")
-        
-        # Denormalize each image in the batch
-        # Assuming img is in the format (Batch, Height, Width)
-        means = np.array([p['mean'] for p in params_list]).reshape(-1, 1, 1)
-        stds = np.array([p['std'] for p in params_list]).reshape(-1, 1, 1)
-        return img * stds + means
-    
-    def inverse(self, img: np.ndarray, params: NormalizationParams) -> np.ndarray:
-        denormalized = img * params["std"] + params["mean"]
+        std = params.get("std").to(input.device)
+        mean = params.get("mean").to(input.device)
+        denormalized = input * std + mean
         return denormalized
     
 
 class PerImageMinMax(_BaseTransform):
     """
-    Normalize the image by scaling it to the range [0, 1]:
-        normalized = (img - min) / (max - min)
+    Normalize the input by scaling it to the range [0, 1]:
+        normalized = (input - min) / (max - min)
     """
-    def __call__(self, img: np.ndarray) -> np.ndarray:
+    def __call__(self, input: torch.Tensor) -> torch.Tensor:
         """
-        Normalize the image by scaling it to the range [0, 1].
-        This method assumes that the input image is in the format
-        (H, W).
+        Normalize the input, this method assumes that it has a shape (B, C, H, W).
 
-        :param img: Image to be normalized.
-        :type img: np.ndarray
-        :return: Normalized image and NormalizationParams containing min and max.
-        :rtype: tuple[np.ndarray, NormalizationParams]
+        :param input: input to be normalized.
+        :type input: torch.Tensor
+        :return: Normalized and NormalizationParams containing min and max.
+        :rtype: tuple[torch.Tensor, NormalizationParams]
         """
-        min_val = img.min()
-        max_val = img.max()
-        normalized = (img - min_val) / (max_val - min_val)
+        min_val = input.amin(dim=(1, 2, 3), keepdim=True)
+        max_val = input.amax(dim=(1, 2, 3), keepdim=True)
+        normalized = (input - min_val) / (max_val - min_val + 1e-8)
         return normalized, NormalizationParams(min=min_val, max=max_val)
     
-    def inverse(self, img: np.ndarray, params: NormalizationParams) -> np.ndarray:
+    def inverse(self, input: torch.Tensor, params: NormalizationParams) -> torch.Tensor:
         """
-        Inverse normalization for a single image.
-        This method assumes that the input image is in the format (H, W).
+        Normalize the input, this method assumes that it has a shape (B, C, H, W).
 
-        :param img: Image to be denormalized.
-        :type img: np.ndarray
+        :param input: Normalized input to be denormalized.
+        :type input: torch.Tensor
         :param params: NormalizationParams containing min and max for the image.
         :type params: NormalizationParams
-        :return: Denormalized image.
-        :rtype: np.ndarray
+        :return: Denormalized images.
+        :rtype: torch.Tensor
         """
-        denormalized = img * (params["max"] - params["min"]) + params["min"]
+        min_ = params.get("min").to(input.device)
+        max_ = params.get("max").to(input.device)
+        denormalized = input * (max_ - min_) + min_
         return denormalized
-    
-    def batched_inverse(self, img: np.ndarray, params_list: list[NormalizationParams]) -> np.ndarray:
-        """
-        Inverse normalization for a batch of images.
-        This method assumes that the input image is in the format (B, H, W)
-        :param img: Batch of images to denormalize.
-        :type img: np.ndarray
-        :param params_list: List of NormalizationParams objects
-        containing min and max for each image.
-        :type params_list: list[NormalizationParams]
-        :return: Denormalized batch of images.
-        :rtype: np.ndarray
-        """
-        # Ensure params is a list of NormalizationParams
-        if not isinstance(params_list, list) or not all(isinstance(p, NormalizationParams) for p in params_list):
-            raise ValueError("params must be a list of NormalizationParams objects")
-        
-        # Ensure img is a numpy array
-        if not isinstance(img, np.ndarray):
-            raise ValueError("img must be a numpy array")
-        
-        # Denormalize each image in the batch
-        # Assuming img is in the format (Batch, Height, Width)
-        mins = np.array([p['min'] for p in params_list]).reshape(-1, 1, 1)
-        maxs = np.array([p['max'] for p in params_list]).reshape(-1, 1, 1)
-        return img * (maxs - mins) + mins
-    

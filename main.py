@@ -1,41 +1,41 @@
-from model_utils.performance_analysis import PAdict
 import os
-from utils import load_pkl_file
+
+from pipelines.pipelines import real_image_cleaner_pipeline
+from data_pipeline import GalaxyDataset, FitsLoader
 
 
 if __name__ == "__main__":
-    # Load the performance analysis data
-    pa_data = load_pkl_file(os.path.join(os.getcwd(), "data", "performance_analysis", "generator_tripple_cgan_best_model_performance_analysis.pkl"))
-    
-    # Create a PAdict instance
-    pa_dict = PAdict(model_name="Model1")
-    
-    # Set the data
-    pa_dict.data = pa_data
-    
-    # Print the PAdict instance
-    df = pa_dict.get_df(True)
-    print(df)
-    
-    # Check if two PAdict instances are equal
-    pa_dict2 = PAdict(model_name="Model2")
-    pa_dict2.data = pa_data
-    print(pa_dict == pa_dict2)
+    attunet_l1_path = os.path.join(os.getcwd(), "data", "attunet_l1")
+    attunet_l1_plus_weighted_l2_path = os.path.join(os.getcwd(), "data", "attunet_l1_plus_weighted_l2")
+    attunet_mse_path = os.path.join(os.getcwd(), "data", "attunet_mse")
+    attunet_mse_weighted_path = os.path.join(os.getcwd(), "data", "attunet_mse_weighted_squared")
 
-    print(pa_dict.model_name)
-    print(pa_dict2.model_name)
+    basic_unet_l1_path = os.path.join(os.getcwd(), "data", "basic_unet_l1")
+    basic_unet_l1_plus_weighted_l2_path = os.path.join(os.getcwd(), "data", "basic_unet_l1_plus_weighted_l2")
+    basic_unet_mse_path = os.path.join(os.getcwd(), "data", "basic_unet_mse")
+    basic_unet_mse_weighted_path = os.path.join(os.getcwd(), "data", "basic_unet_mse_weighted_squared")
+    basic_unet_rescaled_best_model = os.path.join(os.getcwd(), "data", "unet_rescaled")
 
-    pa_dict3 = PAdict(model_name="Model3")
+    patch_gan_unet_path = os.path.join(os.getcwd(), "data", "patch_gan_unet", "checkpoint_2")
+    patch_gan_unet_2_path = os.path.join(os.getcwd(), "data", "patch_gan_unet_2")
 
-    eval_dic = {
-        "PSNR": 1,
-        "SSIM": 2,
-        "LPIPS": 3
-    }
-    count = 10
-    agn_fraction = "f_agn = 0.5"
+    real_image_cleaner_pipeline(
+        model_names=["UNet (L1 + wL2)", "cGAN", "AttUNet (L2)"],
+        model_types=["UNet", "UNet", "AttentionUNET"],
+        model_filenames=["basic_unet_l1_plus_weighted_l2_best_model", "generator_patch_gan_unet_best_model", "attunet_mse_best_model"],
+        data_folders=[basic_unet_l1_plus_weighted_l2_path, patch_gan_unet_path, attunet_mse_path],
+        datasets=[GalaxyDataset, GalaxyDataset, GalaxyDataset],
+        loaders=[FitsLoader, FitsLoader, FitsLoader],
+        transforms=[None, None, None],
+        n=136,
+    )
 
-    pa_dict3.add(agn_fraction, count, eval_dic)
-    pa_dict3.add(agn_fraction, count+10, eval_dic)
+    # Mock Data Analysis:
+    # Model: UNet (L1 + wL2), Mean FRF: -0.5826477790695435
+    # Model: cGAN, Mean FRF: -0.5956644206420112
+    # Model: AttUNet (L2), Mean FRF: -0.13454654596769436
 
-    print(pa_dict3)
+    # Real Data Analysis:
+    # Model: UNet (L1 + wL2), Mean FRF: 0.0622
+    # Model: cGAN, Mean FRF: -0.1305
+    # Model: AttUNet (L2), Mean FRF: 0.1650

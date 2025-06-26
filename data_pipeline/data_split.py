@@ -217,27 +217,15 @@ class ForgeData:
         """
         validate_dict(file_groups, key_type=tuple, value_type=list)
         
-        pattern_agn_free = TELESCOPES_DB["AGN FREE PATTERN"]#"_sn(\\d+)_.*?_(\\d+).fits"
+        pattern_agn_free = TELESCOPES_DB["AGN FREE PATTERN"] #"_sn(\\d+)_.*?_(\\d+).fits"
 
         source = []
         target = []
-        tot_targets_count = 0
-        tot_sources_count = 0
         for _, files in file_groups.items():
-            if any(re.search(pattern_agn_free, f) for f in files):
-                for file in files:
-                    if re.search(pattern_agn_free, file):
-                        tot_targets_count += 1
-                        for i in range(len(files)-1):
-                            target.append(file)
-                    else:
-                        tot_sources_count += 1
-                        source.append(file)
-
-        info = f"Number of source-target pairs: {len(source)}-{len(target)}"
-        info += f"\nTotal targets {tot_targets_count} (AGN free)"
-        info += f"\nTotal sources {tot_sources_count} (AGN corrupted)"
-        print_box(info)
-
+            agn_free_files = [f for f in files if re.search(pattern_agn_free, f)]
+            agn_corrupted_files = [f for f in files if not re.search(pattern_agn_free, f)]
+            if len(agn_free_files) == 1 and len(agn_corrupted_files) > 0:
+                target.extend([agn_free_files[0]] * len(agn_corrupted_files))
+                source.extend(agn_corrupted_files)
         return source, target
     
