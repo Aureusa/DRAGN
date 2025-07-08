@@ -1,5 +1,7 @@
 # DRAGN: Deep Removal of AGN
 
+![Logo](logo.png)
+
 **A Deep Learning approach for AGN
 decomposition and substraction from galaxy observations**
 
