@@ -11,7 +11,7 @@ from networks.models._base_model import BaseModel
 from networks.models.patchdiscriminator import PatchDiscriminator
 from networks.models.UNet import UNet
 from utils import print_box
-from utils_utils.device import get_device
+from utils.device import get_device
 from loggers_utils import TrainingLogger
 
 

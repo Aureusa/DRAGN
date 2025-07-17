@@ -1,14 +1,20 @@
 import os
 import inspect
+import torch
+from tqdm import tqdm
 
 from data_pipeline import _BaseLoader
-from networks.models import AVALAIBLE_MODELS
+from networks.models import AVALAIBLE_MODELS, BaseModel
 from model_training.loss_functions import get_loss_function
 from utils import (
-    print_box
+    print_box,
+    get_device
 )
 from loggers_utils import log_execution
-from utils_utils.validation import validate_type
+from utils.validation import validate_type
+from loggers_utils import TrainingLogger
+from model_testing import Tester # DEPRICATED
+from model_testing.plotter import Plotter # DEPRICATED
 
 
 class Trainer:
@@ -48,7 +54,7 @@ class Trainer:
         if model_type not in AVALAIBLE_MODELS:
             raise ValueError(f"Model type {model_type} is not available. Choose from {list(AVALAIBLE_MODELS.keys())}.")
         
-        self.model = AVALAIBLE_MODELS[model_type](**kwargs)
+        self.model: BaseModel = AVALAIBLE_MODELS[model_type](**kwargs)
 
         self._model_type = model_type
         self._model_filename = model_filename
@@ -78,6 +84,27 @@ class Trainer:
         self._data_folder = os.path.abspath(value)
         if not os.path.exists(self._data_folder):
             os.makedirs(self._data_folder)
+
+    @property
+    def model_filename(self) -> str:
+        """
+        Get the model filename.
+        
+        :return: The model filename.
+        :rtype: str
+        """
+        return self._model_filename
+    
+    @model_filename.setter
+    def model_filename(self, value: str) -> None:
+        """
+        Set the model filename.
+        
+        :param value: The new model filename.
+        :type value: str
+        """
+        validate_type(value, str, obj_name="model_filename")
+        self._model_filename = value
 
     def fine_tune_model(
             self,
@@ -145,6 +172,8 @@ class Trainer:
             loss_name: str,
             lr: float = 0.001,
             num_epochs: int = 50,
+            real_container = None, # DEPRICATED
+            adverserial_logger: bool = False,
         ):
         """
         Train the model with the specified loss function and parameters.
@@ -178,12 +207,167 @@ class Trainer:
         info += f"\nValidation data size: {len(self._val_loader.dataset)}"
         print_box(info)
 
-        self.model.train_model(
-            train_loader=self._train_loader,
-            val_loader=self._val_loader,
-            lr=lr,
-            loss_function=loss_function,
-            num_epochs=num_epochs,
-            model_filename=self._model_filename,
-            data_path=self._data_folder,
+        # Initialize loggers
+        logger = TrainingLogger(
+            save_dir=self.data_folder,
+            adverserial_logger=adverserial_logger,  # Set to False as this is not an adversarial training (DEPRICATED)
         )
+
+        # Initialize the best validation loss
+        best_val_loss = float('inf')
+
+        # Load the best validation loss if in logger
+        if logger.get_best_val_loss() < best_val_loss:
+            best_val_loss = logger.get_best_val_loss()
+
+        # Define the device
+        device = get_device()
+        self.model.to(device)
+
+        print_box(f"Training on {device}!")
+
+        # Define the optimizer
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+
+        # Load optimzer if in logger
+        optimizer_state = logger.get_optimizer_state()
+        if optimizer_state is not None:
+            optimizer.load_state_dict(optimizer_state)
+            print_box("Optimizer state loaded successfully!")
+
+        # Iterate over epochs
+        for epoch in tqdm(
+            range(num_epochs),
+            desc='Epochs left...'
+        ):
+            current_epoch = logger.get_current_epoch()
+
+            train_loss = self.model.train_model(
+                self._train_loader,
+                loss_function,
+                optimizer,
+                device,
+            )
+
+            val_loss = self.model.validate_model(
+                self._val_loader,
+                loss_function,
+                device,
+            )
+
+            if logger.check_best_val_loss(val_loss):
+                best_val_loss = val_loss
+                self.model.save_model(f"{self.model_filename}_best_model", self.data_folder)
+                info = f"Best model saved with validation loss: {best_val_loss:.4f}"
+                print_box(info)
+
+            self.model.save_model(f"{self.model_filename}_epoch_{current_epoch}", self.data_folder)
+            info = f"Checkpoint model saved!"
+            print_box(info)
+
+            logger.log_epoch(
+                train_loss=train_loss,
+                val_loss=val_loss,
+                best_val_loss=best_val_loss,
+                optimizer=optimizer
+            )
+
+            # DEPRICATED
+            self._test_on_real_data(
+                current_epoch=current_epoch,
+                real_container=real_container,
+                device=device,
+            )
+
+    # This method is DEPRICATED and will be removed in future versions.
+    def _test_on_real_data(
+            self,
+            current_epoch: int,
+            real_container,
+            device,
+        ):
+        # Get batched data from the real_container
+        data = []
+        for i in range(len(real_container)):
+            real_data = real_container[i]
+            data.append(real_data)
+        
+        # Stack the data
+        data = torch.stack(data, dim=0) # (B, C, H, W)
+        data_np = data.cpu().numpy()
+
+        # Move the data to the device
+        data = data.to(device)
+
+        self.model.eval()
+        with torch.no_grad():
+            # Get the predictions
+            predictions = self.model(data)
+
+        # Convert predictions to numpy
+        predictions = predictions.cpu().numpy()
+
+        # Create the folder for real data predictions if it doesn't exist
+        real_data_folder = os.path.join(self.data_folder, "real_data_predictions")
+        if not os.path.exists(real_data_folder):
+            os.makedirs(real_data_folder)
+
+        Plotter().grid_plot(
+            sources=[data_np],
+            targets=None,
+            outputs=predictions,
+            titles=[self._model_type],
+            filename=f"epoch_{current_epoch}_real_data",
+            data_folder=real_data_folder,
+        )
+
+    # DEPRICATED: This method is deprecated and will be removed in future versions.    
+
+    # @log_execution("Training started...", "Model trained successfully!")
+    # def train_model(
+    #         self,
+    #         loss_name: str,
+    #         lr: float = 0.001,
+    #         num_epochs: int = 50,
+    #     ):
+    #     """
+    #     Train the model with the specified loss function and parameters.
+
+    #     :param loss_name: The name of the loss function to use for training.
+    #     Should be one of the available loss functions in model_training.loss_functions.
+    #     You can check the available loss functions by running:
+    #             ```
+    #             from model_training import AVALIABLE_LOSS_FUNCTIONS
+
+    #             print(AVALIABLE_LOSS_FUNCTIONS)
+    #             ```
+    #     :type loss_name: str
+    #     :param lr: The learning rate for the optimizer.
+    #     :type lr: float
+    #     :param num_epochs: The number of epochs to train the model.
+    #     :type num_epochs: int
+    #     """
+    #     validate_type(loss_name, str, "loss_name")
+
+    #     # Get the loss function
+    #     loss_function = get_loss_function(loss_name)
+
+    #     # Information
+    #     info = f"Training `{self._model_type}` model with `{loss_name}` loss function."
+    #     info += f"\nModel name: {self._model_filename}"
+    #     info += f"\nData folder: {self._data_folder}"
+    #     info += f"\nBatch size: {self._train_loader.batch_size}"
+    #     info += f"\nNumber of workers: {self._train_loader.num_workers}"
+    #     info += f"\nTraining data size: {len(self._train_loader.dataset)}"
+    #     info += f"\nValidation data size: {len(self._val_loader.dataset)}"
+    #     print_box(info)
+
+    #     self.model.train_model(
+    #         train_loader=self._train_loader,
+    #         val_loader=self._val_loader,
+    #         lr=lr,
+    #         loss_function=loss_function,
+    #         num_epochs=num_epochs,
+    #         model_filename=self._model_filename,
+    #         data_path=self._data_folder,
+    #     )

@@ -37,7 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 from data_pipeline.transforms import NormalizationParams, _BaseTransform
 from data_pipeline.utils import load_fits_data, center_crop
 from utils import print_box
-from utils_utils.validation import validate_numpy_array, validate_list, validate_type
+from utils.validation import validate_numpy_array, validate_list, validate_type
 
 
 class _BaseDataset(Dataset, ABC):
@@ -422,18 +422,8 @@ class MockRealGalaxyDataset(_BaseDataset):
         source_tensor, _ = self._process_data(source_data, transform=True)
         target_tensor, _ = self._process_data(target_data, transform=True)
 
-        real_image_tensor, _ = self._process_data(real_image_data, transform=True)
-
         # Compute the psf
         psf_tensor = source_tensor - target_tensor
-
-        return real_image_tensor, psf_tensor
-
-        # Offset psf_tensor halfway to the top left corner
-        H, W = psf_tensor.shape[-2:]
-        shift_y = -H // 4
-        shift_x = -W // 4
-        psf_tensor = torch.roll(psf_tensor, shifts=(shift_y, shift_x), dims=(-2, -1))
         
         # Preprocess the real image
         real_image_tensor, _ = self._process_data(real_image_data, transform=True)

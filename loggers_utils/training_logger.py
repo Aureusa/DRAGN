@@ -67,7 +67,7 @@ from pathlib import Path
 
 from loggers_utils.execution_logger import log_execution
 from utils import print_box
-from utils_utils.validation import validate_type
+from utils.validation import validate_type
 
 
 class TrainingLogger:
@@ -177,6 +177,17 @@ class TrainingLogger:
         if save_history:
             self.save_history()
             print_box("History saved successfully!")
+
+    def get_current_epoch(self):
+        """
+        Returns the current epoch number based on the logged history.
+
+        :return: The current epoch number.
+        :rtype: int
+        """
+        if len(self.history["epoch"]) == 0:
+            return 0
+        return self.history["epoch"][-1]
 
     def get_optimizer_state(self):
         """

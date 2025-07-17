@@ -5,7 +5,7 @@ import torch.nn as nn
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 
 from utils import print_box
-from utils_utils.validation import check_4tensor_inputs
+from utils.validation import check_4tensor_inputs
 
 
 def get_metrics(metrics: list[str], verbose: bool = True) -> list:

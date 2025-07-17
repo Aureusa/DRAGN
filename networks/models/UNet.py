@@ -11,7 +11,7 @@ import pickle
 from networks.models._base_model import BaseModel
 from loggers_utils import TrainingLogger
 from utils import print_box
-from utils_utils.device import get_device
+from utils.device import get_device
 
 
 # TODO: Impliment the train_model, save_model, and save_train_val_loss methods
@@ -74,73 +74,61 @@ class UNet(BasicUNet, BaseModel):
     def train_model(
             self,
             train_loader: torch.utils.data.DataLoader,
-            val_loader: torch.utils.data.DataLoader,
-            lr: float,
             loss_function: callable,
-            num_epochs: int,
-            model_filename: str = "Placeholder",
-            data_path: str = "data",
+            optimizer: torch.optim.Optimizer,
+            device,
         ) -> None:
-        """
-        Train the model.
+        self.train()
+        epoch_loss = 0
+        for inputs, targets in train_loader:
+            # Move the data to the device
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+            psf = inputs - targets
 
-        :param train_loader: DataLoader for training data.
-        :train_loader type: torch.utils.data.DataLoader
+            # Zero the gradients
+            optimizer.zero_grad()
+
+            # Generate predictions
+            outputs = self.forward(inputs)
+
+            # Calculate the loss
+            loss = loss_function(inputs, outputs, targets, psf)
+
+            # Perform backpropagation
+            loss.backward()
+            optimizer.step()
+
+            # Update the loss
+            epoch_loss += loss.item()
+
+        return epoch_loss / len(train_loader)
+
+    def validate_model(
+            self,
+            val_loader: torch.utils.data.DataLoader,
+            loss_function: callable,
+            device
+        ) -> float:
+        """
+        Validate the model.
+
         :param val_loader: DataLoader for validation data.
         :val_loader type: torch.utils.data.DataLoader
-        :param lr: Learning rate.
-        :lr type: float
         :param loss_function: Loss function to use.
         :loss_function type: callable
-        :param num_epochs: Number of epochs to train for.
-        :num_epochs type: int
-        :param checkpoints: List of epochs to save checkpoints.
-        :checkpoints type: list[int]
-        :param wandb_project_name: WandB project name.
-        :wandb_project_name type: str
-        :param wandb_entity: WandB entity name.
-        :wandb_entity type: str
+        :return: Validation loss.
+        :rtype: float
         """
-        # Initialize loggers
-        logger = TrainingLogger(data_path)
+        self.eval()
+        val_loss = 0
 
-        # Initialize the best validation loss
-        best_val_loss = float('inf')
-
-        # Load the best validation loss if in logger
-        if logger.get_best_val_loss() < best_val_loss:
-            best_val_loss = logger.get_best_val_loss()
-
-        # Define the device
-        device = get_device()
-        self.to(device)
-
-        print_box(f"Training on {device}!")
-
-        # Define the optimizer
-        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-
-        # Load optimzer if in logger
-        optimizer_state = logger.get_optimizer_state()
-        if optimizer_state is not None:
-            optimizer.load_state_dict(optimizer_state)
-            print_box("Optimizer state loaded successfully!")
-
-        # Iterate over epochs
-        for epoch in tqdm(
-            range(num_epochs),
-            desc='Epochs left...'
-        ):
-            self.train()
-            epoch_loss = 0
-            for inputs, targets in train_loader:
+        with torch.no_grad():
+            for inputs, targets in val_loader:
                 # Move the data to the device
                 inputs = inputs.to(device)
                 targets = targets.to(device)
                 psf = inputs - targets
-
-                # Zero the gradients
-                optimizer.zero_grad()
 
                 # Generate predictions
                 outputs = self.forward(inputs)
@@ -148,49 +136,131 @@ class UNet(BasicUNet, BaseModel):
                 # Calculate the loss
                 loss = loss_function(inputs, outputs, targets, psf)
 
-                # Perform backpropagation
-                loss.backward()
-                optimizer.step()
-
                 # Update the loss
-                epoch_loss += loss.item()
+                val_loss += loss.item()
 
-            # Evaluate the model
-            self.eval()
-            val_loss = 0
+        return val_loss / len(val_loader)
+    
+    # def train_model(
+    #         self,
+    #         train_loader: torch.utils.data.DataLoader,
+    #         val_loader: torch.utils.data.DataLoader,
+    #         lr: float,
+    #         loss_function: callable,
+    #         num_epochs: int,
+    #         model_filename: str = "Placeholder",
+    #         data_path: str = "data",
+    #     ) -> None:
+    #     """
+    #     Train the model.
 
-            with torch.no_grad():
-                for inputs, targets in val_loader:
-                    # Move the data to the device
-                    inputs = inputs.to(device)
-                    targets = targets.to(device)
-                    psf = inputs - targets
+    #     :param train_loader: DataLoader for training data.
+    #     :train_loader type: torch.utils.data.DataLoader
+    #     :param val_loader: DataLoader for validation data.
+    #     :val_loader type: torch.utils.data.DataLoader
+    #     :param lr: Learning rate.
+    #     :lr type: float
+    #     :param loss_function: Loss function to use.
+    #     :loss_function type: callable
+    #     :param num_epochs: Number of epochs to train for.
+    #     :num_epochs type: int
+    #     :param checkpoints: List of epochs to save checkpoints.
+    #     :checkpoints type: list[int]
+    #     :param wandb_project_name: WandB project name.
+    #     :wandb_project_name type: str
+    #     :param wandb_entity: WandB entity name.
+    #     :wandb_entity type: str
+    #     """
+    #     # Initialize loggers
+    #     logger = TrainingLogger(data_path)
 
-                    # Generate predictions
-                    outputs = self.forward(inputs)
+    #     # Initialize the best validation loss
+    #     best_val_loss = float('inf')
 
-                    # Calculate the loss
-                    loss = loss_function(inputs, outputs, targets, psf)
+    #     # Load the best validation loss if in logger
+    #     if logger.get_best_val_loss() < best_val_loss:
+    #         best_val_loss = logger.get_best_val_loss()
 
-                    # Update the loss
-                    val_loss += loss.item()
+    #     # Define the device
+    #     device = get_device()
+    #     self.to(device)
 
-            if logger.check_best_val_loss(val_loss / len(val_loader)):
-                best_val_loss = val_loss / len(val_loader)
-                self.save_model(f"{model_filename}_best_model", data_path)
-                info = f"Best model saved with validation loss: {best_val_loss:.4f}"
-                print_box(info)
+    #     print_box(f"Training on {device}!")
 
-            self.save_model(f"{model_filename}_epoch", data_path)
-            info = f"Checkpoint model saved!"
-            print_box(info)
+    #     # Define the optimizer
+    #     optimizer = torch.optim.Adam(self.parameters(), lr=lr)
 
-            logger.log_epoch(
-                train_loss=epoch_loss / len(train_loader),
-                val_loss=val_loss / len(val_loader),
-                best_val_loss=best_val_loss,
-                optimizer=optimizer
-            )
+    #     # Load optimzer if in logger
+    #     optimizer_state = logger.get_optimizer_state()
+    #     if optimizer_state is not None:
+    #         optimizer.load_state_dict(optimizer_state)
+    #         print_box("Optimizer state loaded successfully!")
+
+    #     # Iterate over epochs
+    #     for epoch in tqdm(
+    #         range(num_epochs),
+    #         desc='Epochs left...'
+    #     ):
+    #         self.train()
+    #         epoch_loss = 0
+    #         for inputs, targets in train_loader:
+    #             # Move the data to the device
+    #             inputs = inputs.to(device)
+    #             targets = targets.to(device)
+    #             psf = inputs - targets
+
+    #             # Zero the gradients
+    #             optimizer.zero_grad()
+
+    #             # Generate predictions
+    #             outputs = self.forward(inputs)
+
+    #             # Calculate the loss
+    #             loss = loss_function(inputs, outputs, targets, psf)
+
+    #             # Perform backpropagation
+    #             loss.backward()
+    #             optimizer.step()
+
+    #             # Update the loss
+    #             epoch_loss += loss.item()
+
+    #         # Evaluate the model
+    #         self.eval()
+    #         val_loss = 0
+
+    #         with torch.no_grad():
+    #             for inputs, targets in val_loader:
+    #                 # Move the data to the device
+    #                 inputs = inputs.to(device)
+    #                 targets = targets.to(device)
+    #                 psf = inputs - targets
+
+    #                 # Generate predictions
+    #                 outputs = self.forward(inputs)
+
+    #                 # Calculate the loss
+    #                 loss = loss_function(inputs, outputs, targets, psf)
+
+    #                 # Update the loss
+    #                 val_loss += loss.item()
+
+    #         if logger.check_best_val_loss(val_loss / len(val_loader)):
+    #             best_val_loss = val_loss / len(val_loader)
+    #             self.save_model(f"{model_filename}_best_model", data_path)
+    #             info = f"Best model saved with validation loss: {best_val_loss:.4f}"
+    #             print_box(info)
+
+    #         self.save_model(f"{model_filename}_epoch", data_path)
+    #         info = f"Checkpoint model saved!"
+    #         print_box(info)
+
+    #         logger.log_epoch(
+    #             train_loss=epoch_loss / len(train_loader),
+    #             val_loss=val_loss / len(val_loader),
+    #             best_val_loss=best_val_loss,
+    #             optimizer=optimizer
+    #         )
 
     def save_model(self, filename: str,  dir_: str):
         """

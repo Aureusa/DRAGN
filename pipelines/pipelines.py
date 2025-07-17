@@ -275,7 +275,7 @@ def mockreal_image_cleaner_pipeline(
     print_box(f"Found {len(fits_files)} .fits files in {real_images_path}")
 
     # Load the test data
-    X_test, y_test = load_pkl_file("/home4/s4683099/Deep-AGN-Clean/data/jwst_full_data/test_data.pkl")
+    X_test, y_test = load_pkl_file("/home4/s4683099/Deep-AGN-Clean/results/jwst_full_data/test_data.pkl")
 
     source_list = []
     target_list = []

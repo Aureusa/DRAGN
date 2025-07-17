@@ -3,7 +3,7 @@ import numpy as np
 
 
 from utils import print_box
-from utils_utils.warnings import AttributeMisuseWarning
+from utils.warnings import AttributeMisuseWarning
 
 
 class PAdict:

@@ -4,7 +4,7 @@ from typing import Any
 from abc import ABC, abstractmethod
 import torch.nn.functional as F
 
-from utils_utils.validation import check_4tensor_inputs
+from utils.validation import check_4tensor_inputs
 
 
 def get_loss_function(loss_name: str) -> None:

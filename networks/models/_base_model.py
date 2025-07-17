@@ -3,7 +3,7 @@ import torch
 import os
 
 from utils import print_box
-from utils_utils.device import get_device
+from utils.device import get_device
 
 
 class BaseModel(ABC):

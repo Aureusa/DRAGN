@@ -1,3 +1,4 @@
+from ._base_model import BaseModel
 from .attention_unet import AttentionUNET
 from .UNet import UNet
 from .patchGAN import PatchGANUNet

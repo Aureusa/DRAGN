@@ -9,7 +9,7 @@ from monai.networks.nets import AttentionUnet
 from networks.models._base_model import BaseModel
 from loggers_utils import TrainingLogger
 from utils import print_box
-from utils_utils.device import get_device
+from utils.device import get_device
 
 
 class AttentionUNET(AttentionUnet, BaseModel):

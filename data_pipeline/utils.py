@@ -3,7 +3,7 @@ from reproject import reproject_exact
 from astropy.wcs import WCS
 from astropy.wcs.utils import proj_plane_pixel_scales
 import numpy as np
-from utils_utils.validation import validate_numpy_array
+from utils.validation import validate_numpy_array
 from scipy.ndimage import zoom
 
 

@@ -27,7 +27,7 @@ import random
 from data_pipeline._telescopes_db import TELESCOPES_DB
 from loggers_utils import log_execution
 from utils import print_box
-from utils_utils.validation import validate_dict
+from utils.validation import validate_dict
 
 # Derpicated function, use `ForgeData` class instead.
 def create_source_target_pairs(file_groups: dict) -> tuple[list[str], list[str]]:

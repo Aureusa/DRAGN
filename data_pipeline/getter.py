@@ -41,7 +41,7 @@ from collections import defaultdict
 from data_pipeline._telescopes_db import TELESCOPES_DB
 from loggers_utils import log_execution
 from utils import print_box
-from utils_utils.validation import validate_filename_pattern
+from utils.validation import validate_filename_pattern
 
 # Define the scratch dir to use in habrok
 SCRATCH_DIR = "/scratch"

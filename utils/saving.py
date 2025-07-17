@@ -1,42 +1,7 @@
-"""
-NOTE FOR USERS:
-
-STILL IN DEVELOPMENT. DEPRICATED
-This .py file contains basic utility functions for the DRAGN project which will be
-moved to the `utils_utils` module in the future.
-"""
-
 import os
 import pickle as pkl
 from typing import Any
 
-
-def print_box(message: str):
-    """
-    Print a message in a box format.
-    The box is created using Unicode box-drawing characters.
-
-    :param message: The message to be printed in the box.
-    :type message: str
-    """
-    # Ensure the box starts on a new line
-    print()
-
-    #91
-    lines = message.split('\n')
-    for line in lines:
-        if len(line) > 91:
-            split_index = line.rfind(' ', 0, 91)
-            if split_index != -1:
-                lines.insert(lines.index(line) + 1, line[split_index + 1:])
-                lines[lines.index(line)] = line[:split_index]
-    max_length = 88
-    border_up = '┌' + '─' * (max_length + 2) + '┐'
-    border_down = '└' + '─' * (max_length + 2) + '┘'
-    print(border_up)
-    for line in lines:
-        print(f'│ {line.ljust(max_length)} │')
-    print(border_down)
 
 def load_pkl_file(full_filepath: str) -> Any:
     """
@@ -76,4 +41,5 @@ def save_pkl_file(data: Any, full_filepath: str):
     with open(full_filepath, "wb") as file:
         pkl.dump(data, file)
 
+    from utils.printing import print_box
     print_box(f"Data dumped in `{full_filepath}`")

@@ -20,7 +20,7 @@ from utils import (
     save_pkl_file,
     print_box
 )
-from utils_utils.device import get_device
+from utils.device import get_device
 
 
 MODELS_FOLDER = os.path.join("data", "saved_models")
@@ -35,6 +35,7 @@ class Tester:
             data_folder: str,
             test_loader: _BaseLoader,
             transform: _BaseTransform|None = None,
+            model = None, # DEPRICATED
             **kwargs
         ) -> None:
         """
@@ -66,24 +67,27 @@ class Tester:
         # Initialize the device
         self._device = get_device()
 
-        # Initialize the model
-        if model_type not in AVALAIBLE_MODELS:
-            raise ValueError(f"Model type '{model_type}' is not supported.")
-        
-        self._model = AVALAIBLE_MODELS[model_type](**kwargs)
+        if model is not None: # DEPRICATED
+            self._model = model # DEPRICATED
+        else:
+            # Initialize the model
+            if model_type not in AVALAIBLE_MODELS:
+                raise ValueError(f"Model type '{model_type}' is not supported.")
+            
+            self._model = AVALAIBLE_MODELS[model_type](**kwargs)
 
-        try:
-            # Load the model
-            self._model.load_model(model_filename, data_folder)
+            try:
+                # Load the model
+                self._model.load_model(model_filename, data_folder)
 
-            info = "Model Tester initialized.\n"
-            info += f"Model type: {model_type}\n"
-            info += f"Model filename: {model_filename}\n"
-            info += f"Data folder: {data_folder}\n"
-            info += f"Device: {self._device}"
-            print_box(info)
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"File not found: {e.filename}. Please check the file path.") from e
+                info = "Model Tester initialized.\n"
+                info += f"Model type: {model_type}\n"
+                info += f"Model filename: {model_filename}\n"
+                info += f"Data folder: {data_folder}\n"
+                info += f"Device: {self._device}"
+                print_box(info)
+            except FileNotFoundError as e:
+                raise FileNotFoundError(f"File not found: {e.filename}. Please check the file path.") from e
         
         self._model_filename = model_filename
         self._model_type = model_type
@@ -301,19 +305,19 @@ class Tester:
             np.ndarray,
             ]:
         """
-        Clean n images using the model. It uses the test dataset by default.
-        If `test_set` is set to False, it uses the training dataset.
+        Clean n images using the model
 
         :param n: Number of images to clean.
         :type n: int
-        :param test_set: Whether to use the test dataset or the training dataset.
-        :type test_set: bool
-        :return: Tuple of numpy arrays containing the source images,
-        target images, output images, the difference between the cleaned and
-        source images (the diff images), and the injected psfs.
-        The dimensions are (n, width, height) for the source, target, cleaned,
-        diff, and psf arrays.
-        :rtype: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+        :param f_agn: List of AGN fractions to filter the dataset by.
+        If None, the dataset will not be filtered by AGN fraction.
+        :type f_agn: list[int]|int|None
+        :return: Tuple of numpy arrays containing the source images, target images,
+        cleaned images, predicted PSF, and PSF.
+        The shape of each array is (n, len(f_agn), H, W),
+        where n is the number of images, len(f_agn) is the number of AGN fractions,
+        and H, W are the height and width of the images.
+        :rtype: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
         """
         # Get the loader and the dataset
         loader_type = type(self._test_loader)

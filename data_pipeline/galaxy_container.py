@@ -107,6 +107,6 @@ class GalaxyContainer:
         data = center_crop(data, 128, 128)
 
         # Convert the data to torch tensors
-        #data = torch.tensor(data, dtype=torch.float32).unsqueeze(0)
+        data = torch.tensor(data, dtype=torch.float32).unsqueeze(0)
         return data
     

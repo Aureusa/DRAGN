@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 
 from data_pipeline.galaxy_dataset import _BaseDataset
 from data_pipeline.transforms import _BaseTransform
-from utils_utils.validation import validate_type
+from utils.validation import validate_type
 
 
 class _BaseLoader(DataLoader):
