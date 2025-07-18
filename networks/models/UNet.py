@@ -82,9 +82,9 @@ class UNet(BasicUNet, BaseModel):
         epoch_loss = 0
         for inputs, targets in train_loader:
             # Move the data to the device
-            inputs = inputs.to(device)
-            targets = targets.to(device)
-            psf = inputs - targets
+            inputs = inputs.to(device, non_blocking=True)
+            targets = targets.to(device, non_blocking=True)
+            psf = inputs[:, 0:1, :, :] - targets
 
             # Zero the gradients
             optimizer.zero_grad()
@@ -93,7 +93,7 @@ class UNet(BasicUNet, BaseModel):
             outputs = self.forward(inputs)
 
             # Calculate the loss
-            loss = loss_function(inputs, outputs, targets, psf)
+            loss = loss_function(inputs[:, 0:1, :, :], outputs, targets, psf)
 
             # Perform backpropagation
             loss.backward()
@@ -101,6 +101,11 @@ class UNet(BasicUNet, BaseModel):
 
             # Update the loss
             epoch_loss += loss.item()
+            
+            # Clear cache and delete variables to free memory
+            del inputs, targets, outputs, psf
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
 
         return epoch_loss / len(train_loader)
 
@@ -126,18 +131,23 @@ class UNet(BasicUNet, BaseModel):
         with torch.no_grad():
             for inputs, targets in val_loader:
                 # Move the data to the device
-                inputs = inputs.to(device)
-                targets = targets.to(device)
-                psf = inputs - targets
+                inputs = inputs.to(device, non_blocking=True)
+                targets = targets.to(device, non_blocking=True)
+                psf = inputs[:, 0:1, :, :] - targets
 
                 # Generate predictions
                 outputs = self.forward(inputs)
 
                 # Calculate the loss
-                loss = loss_function(inputs, outputs, targets, psf)
+                loss = loss_function(inputs[:, 0:1, :, :], outputs, targets, psf)
 
                 # Update the loss
                 val_loss += loss.item()
+                
+                # Clear cache and delete variables to free memory
+                del inputs, targets, outputs, psf
+                if device.type == 'cuda':
+                    torch.cuda.empty_cache()
 
         return val_loss / len(val_loader)
     

@@ -303,6 +303,7 @@ class Trainer:
         with torch.no_grad():
             # Get the predictions
             predictions = self.model(data)
+            predictions = predictions.unsqueeze(0)
 
         # Convert predictions to numpy
         predictions = predictions.cpu().numpy()
@@ -312,14 +313,24 @@ class Trainer:
         if not os.path.exists(real_data_folder):
             os.makedirs(real_data_folder)
 
+        data_folder = os.path.join(real_data_folder, f"epoch_{current_epoch}")
+        if not os.path.exists(data_folder):
+            os.makedirs(data_folder)
+
         Plotter().grid_plot(
             sources=[data_np],
             targets=None,
             outputs=predictions,
             titles=[self._model_type],
             filename=f"epoch_{current_epoch}_real_data",
-            data_folder=real_data_folder,
+            data_folder=data_folder,
+            f_agn=None,
+            save=True
         )
+
+        # Clean up memory
+        del data, predictions, data_np
+        torch.cuda.empty_cache()
 
     # DEPRICATED: This method is deprecated and will be removed in future versions.    
 

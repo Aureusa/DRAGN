@@ -18,8 +18,14 @@ def training_pipeline(
         lr,
         num_epochs,
         mockdata_filepath: str = os.path.join("testing_folder", "jwst_data"),
+        condition_on_f_agn: bool = False,
         **model_kwargs
     ) -> None:
+    # If condition_on_f_agn is True, ensure the model supports it by
+    # adding `in_channels=2` to the model_kwargs
+    if condition_on_f_agn and model_type in AVALAIBLE_MODELS:
+        model_kwargs['in_channels'] = 2
+
     # Load training and validation data
     X_train, y_train = load_pkl_file(
         os.path.join(mockdata_filepath, "train_data.pkl")
@@ -32,12 +38,14 @@ def training_pipeline(
     train_set = GalaxyDataset(
         X_train,
         y_train,
-        training=True
+        training=True,
+        condition_on_f_agn=condition_on_f_agn
     )
     val_set = GalaxyDataset(
         X_val,
         y_val,
-        training=True
+        training=True,
+        condition_on_f_agn=condition_on_f_agn
     )
 
     # Creating the data loaders
@@ -65,11 +73,11 @@ def training_pipeline(
     
     if existing_models:
         from utils.warnings import DRAGNWarning
-        DRAGNWarning(
+        DRAGNWarning().warn(
             f"Models with similar filename signature already exist in `{data_folder}`: {existing_models}. "
             "The Trainer would proceed to fine-tune the model. If you want to start fresh erase the contents of"
             f" `{data_folder}` or chose a different `data_folder` argument."
-        ).warn()
+        )
 
     # Load real data
     real_data = glob.glob("/scratch/s4683099/real_JWST/COSMOS-Web_cutouts_Zhuang2024/*.fits", recursive=True)

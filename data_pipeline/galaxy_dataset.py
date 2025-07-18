@@ -35,6 +35,7 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 
 from data_pipeline.transforms import NormalizationParams, _BaseTransform
+from data_pipeline._telescopes_db import TELESCOPES_DB
 from data_pipeline.utils import load_fits_data, center_crop
 from utils import print_box
 from utils.validation import validate_numpy_array, validate_list, validate_type
@@ -240,7 +241,8 @@ class GalaxyDataset(_BaseDataset):
         source: list[str],
         target: list[str],
         transform: _BaseTransform|None = None,
-        training: bool = True
+        training: bool = True,
+        condition_on_f_agn: bool = False
     ):
         """
         Initialize the GalaxyDataset class.
@@ -257,6 +259,7 @@ class GalaxyDataset(_BaseDataset):
         :type training: bool
         """
         super().__init__(source, target, transform, training)
+        self._condition_on_f_agn = condition_on_f_agn
 
     def _fits_below_threshold(self, pair, threshold):
         input_data = load_fits_data(pair[0], max_val=True)
@@ -324,6 +327,10 @@ class GalaxyDataset(_BaseDataset):
 
         # Preprocess the input data
         input_tensor, input_norm_params = self._process_data(input_data, transform=True)
+
+        # If condition_on_f_agn is True, condition the input tensor on the AGN fraction
+        if self._condition_on_f_agn:
+            input_tensor = self._condition_input_tensor_on_f_agn(input_tensor, input_filepath)
         
         if self.training:
             target_tensor, _ = self._process_data(target_data, transform=True)
@@ -331,6 +338,39 @@ class GalaxyDataset(_BaseDataset):
         else:
             target_tensor, _ = self._process_data(target_data, transform=False)
             return input_tensor, target_tensor, input_norm_params
+        
+    def _condition_input_tensor_on_f_agn(self, input_tensor: torch.Tensor, input_filepath: str) -> torch.Tensor:
+        """
+        Condition the input tensor based on the AGN fraction.
+        This method adds another channel dimension full with the
+        f_agn fraction of the input image.
+
+        :param input_tensor: The input tensor to condition.
+        :type input_tensor: torch.Tensor
+        :param f_agn: The AGN fraction to condition on.
+        :type f_agn: float
+        :return: The conditioned input tensor.
+        :rtype: torch.Tensor
+        """
+        # Get the AGN fraction from the input file name
+        match = re.search(
+            TELESCOPES_DB["AGN FRACTION PATTERN"], # r"_f(.*?)\\.fits"
+            input_filepath
+        )
+
+        # Get the AGN fraction from the match
+        if match:
+            f_agn = int(match.group(1)) / 100
+        else:
+            f_agn = 0.0  # Default value if not found
+        
+        # Get the shape of the input tensor
+        _, height, width = input_tensor.shape
+        
+        # Add the AGN fraction as a new channel
+        f_agn_tensor = torch.full((1, height, width), f_agn, dtype=torch.float32) # (B, 1, H, W) full with f_agn value
+        input_tensor = torch.cat((input_tensor, f_agn_tensor), dim=0)
+        return input_tensor
 
     def _process_data(self, data: np.ndarray, transform: bool = True) -> tuple[np.ndarray, NormalizationParams]:
         """
@@ -356,14 +396,14 @@ class GalaxyDataset(_BaseDataset):
         data = center_crop(data, 128, 128)
 
         if transform and self.transform is not None:
-            data = torch.tensor(data, dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+            data = torch.tensor(data, dtype=torch.float32).unsqueeze(0)
             # Normalize the images
             data, data_norm_param = self.transform(data)
             data = data.squeeze(0)
             return data, data_norm_param
 
         # Convert the data to torch tensors
-        data = torch.tensor(data, dtype=torch.float32).unsqueeze(0)
+        data = torch.tensor(data, dtype=torch.float32).unsqueeze(0) # (1, H, W)
         return data, data_norm_param
     
 class MockRealGalaxyDataset(_BaseDataset):
