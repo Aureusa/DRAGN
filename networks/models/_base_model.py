@@ -1,32 +1,47 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+from typing import Dict, Any
 import torch
+import torch.nn as nn
 import os
 
+from core.component import Component
 from utils import print_box
 from utils.device import get_device
 
 
-class BaseModel(ABC):
+class BaseModel(nn.Module, Component):
     """
-    Base class for all models.
-    This class defines the basic structure and methods
-    that all models should implement.
+    Base for PyTorch models with config support
     """
+    def __init__(self):
+        super().__init__()
+    
     @abstractmethod
-    def train_model(self):
+    def forward(self, x):
         """
-        Train the model.
+        PyTorch forward pass - this is what should be abstract
         """
         pass
-
+    
+    @classmethod  
     @abstractmethod
-    def save_model(self, filename: str,  dir_: str):
+    def from_config(cls, config: Dict[str, Any], **kwargs):
+        """
+        Config construction - this should be abstract
+        """
+        pass
+    
+    # Utility methods (concrete, not abstract)
+    def save_checkpoint(self, filename: str, dir_: str):
         """
         Save the model to a file.
         
         :param name: Name of the file to save the model to.
         :type name: str
         """
+        if filename.endswith(".pth"):
+            filename = filename[:-4]
+
         path = os.path.join(dir_, f"{filename}.pth")
 
         torch.save(self.state_dict(), path)
@@ -35,8 +50,7 @@ class BaseModel(ABC):
         info += f"Path to model: {dir_}"
         print_box(info)
 
-    @abstractmethod
-    def load_model(self, filename: str,  dir_: str):
+    def load_checkpoint(self, filename: str, dir_: str):
         """
         Load the model from a file.
         
@@ -45,6 +59,9 @@ class BaseModel(ABC):
         :param dir_: Directory to load the model from.
         :type dir_: str
         """
+        if filename.endswith(".pth"):
+            filename = filename[:-4]
+            
         self.load_state_dict(torch.load(os.path.join(dir_, f"{filename}.pth"), map_location=get_device()))
 
         info = f"Model `{filename}` loaded successfully!"

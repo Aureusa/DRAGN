@@ -16,6 +16,8 @@ from loggers_utils import TrainingLogger
 from model_testing import Tester # DEPRICATED
 from model_testing.plotter import Plotter # DEPRICATED
 
+from data_pipeline.transforms import PerImageAsinhNormalize
+
 
 class Trainer:
     def __init__(
@@ -62,6 +64,8 @@ class Trainer:
 
         self._train_loader = train_loader
         self._val_loader = val_loader
+
+        self._normalize = PerImageAsinhNormalize()  # Use asinh normalization for better handling of spikes
 
     @property
     def data_folder(self) -> str:
@@ -173,7 +177,7 @@ class Trainer:
             lr: float = 0.001,
             num_epochs: int = 50,
             real_container = None, # DEPRICATED
-            adverserial_logger: bool = False,
+            training_GAN: bool = False,
         ):
         """
         Train the model with the specified loss function and parameters.
@@ -210,7 +214,7 @@ class Trainer:
         # Initialize loggers
         logger = TrainingLogger(
             save_dir=self.data_folder,
-            adverserial_logger=adverserial_logger,  # Set to False as this is not an adversarial training (DEPRICATED)
+            adversarial_logger=training_GAN,  # Set to False as this is not an adversarial training (DEPRICATED)
         )
 
         # Initialize the best validation loss
@@ -225,22 +229,26 @@ class Trainer:
         self.model.to(device)
 
         print_box(f"Training on {device}!")
-
-        # Define the optimizer
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-
-        # Load optimzer if in logger
-        optimizer_state = logger.get_optimizer_state()
-        if optimizer_state is not None:
-            optimizer.load_state_dict(optimizer_state)
-            print_box("Optimizer state loaded successfully!")
-
+        
+        optimizer = self._get_optimzer(logger, training_GAN, lr)
+        
         # Iterate over epochs
+        loaded_model = False
         for epoch in tqdm(
             range(num_epochs),
             desc='Epochs left...'
         ):
             current_epoch = logger.get_current_epoch()
+
+            if not loaded_model and current_epoch > 0:
+                # Load the model if it is not loaded yet
+                self.model.load_model(
+                    dir_=self.data_folder,
+                    filename=f"{self.model_filename}_epoch_{current_epoch-1}",
+                )
+                loaded_model = True
+            elif not loaded_model:
+                print_box("No model loaded, starting from scratch!")
 
             train_loss = self.model.train_model(
                 self._train_loader,
@@ -255,8 +263,8 @@ class Trainer:
                 device,
             )
 
-            if logger.check_best_val_loss(val_loss):
-                best_val_loss = val_loss
+            if logger.check_best_val_loss(val_loss[0] if training_GAN else val_loss):
+                best_val_loss = val_loss[0] if training_GAN else val_loss
                 self.model.save_model(f"{self.model_filename}_best_model", self.data_folder)
                 info = f"Best model saved with validation loss: {best_val_loss:.4f}"
                 print_box(info)
@@ -266,10 +274,13 @@ class Trainer:
             print_box(info)
 
             logger.log_epoch(
-                train_loss=train_loss,
-                val_loss=val_loss,
+                train_loss=train_loss[0] if training_GAN else train_loss,
+                val_loss=val_loss[0] if training_GAN else val_loss,
                 best_val_loss=best_val_loss,
-                optimizer=optimizer
+                optimizer=optimizer[0] if training_GAN else optimizer,
+                optimizer2=optimizer[1] if training_GAN else None,
+                train_loss_D=train_loss[1] if training_GAN else None,
+                val_loss_D=val_loss[1] if training_GAN else None,
             )
 
             # DEPRICATED
@@ -278,6 +289,39 @@ class Trainer:
                 real_container=real_container,
                 device=device,
             )
+
+    def _get_optimzer(self, logger: TrainingLogger, training_GAN: bool = False, lr: float = 0.001):
+        if training_GAN:
+            # Define the optimizers
+            optimizer_G = torch.optim.Adam(self.model.G.parameters(), lr=lr, weight_decay=1e-4)
+            optimizer_D = torch.optim.Adam(self.model.D.parameters(), lr=lr, weight_decay=1e-4)
+            
+            # Load optimizers if in logger
+            optimizer_G_state = logger.get_optimizer_state()
+            optimizer_D_state = logger.get_optimizer2_state()
+
+            # Check if optimizer states are available and assign them
+            if optimizer_G_state is not None:
+                optimizer_G.load_state_dict(optimizer_G_state)
+                print_box("Optimizer state (Generator) loaded successfully!")
+            if optimizer_D_state is not None:
+                optimizer_D.load_state_dict(optimizer_D_state)
+                print_box("Optimizer 2 state (Discriminator) loaded successfully!")
+
+            optimizer = tuple((optimizer_G, optimizer_D))
+        else: # It is not a GAN training (assumes 1 optimizer)
+            # Define the optimizer
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
+
+            # Load optimzer if in logger
+            optimizer_state = logger.get_optimizer_state()
+
+            # Check if optimizer state is available and assign it
+            if optimizer_state is not None:
+                optimizer.load_state_dict(optimizer_state)
+                print_box("Optimizer state loaded successfully!")
+
+        return optimizer
 
     # This method is DEPRICATED and will be removed in future versions.
     def _test_on_real_data(
@@ -296,13 +340,24 @@ class Trainer:
         data = torch.stack(data, dim=0) # (B, C, H, W)
         data_np = data.cpu().numpy()
 
+        if data.shape[1] == 2:
+            # If the data has 2 channels, we assume it is conditioned on AGN fraction
+            data_np = data_np[:, 0:1, :, :]
+            print_box(f"Data shape: {data_np.shape}")
+
         # Move the data to the device
         data = data.to(device)
 
         self.model.eval()
         with torch.no_grad():
             # Get the predictions
+            data, norm_params = self._normalize(data)
             predictions = self.model(data)
+
+            # Inverse the normalization
+            predictions = self._normalize.inverse(predictions, norm_params)
+            data = self._normalize.inverse(data, norm_params)
+
             predictions = predictions.unsqueeze(0)
 
         # Convert predictions to numpy

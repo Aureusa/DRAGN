@@ -50,6 +50,12 @@ class AttentionUNET(AttentionUnet, BaseModel):
             *args,
             **kwargs
         )
+    
+    def from_config(cls, config):
+        """
+        Config construction - this should be abstract
+        """
+        raise NotImplementedError("from_config method is not implemented for AttentionUNET")
 
     def forward(self, x):
         """

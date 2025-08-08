@@ -327,7 +327,7 @@ class Tester:
 
         if f_agn is None:
             # Filter the dataset
-            dataset.filter_first_n(n=n)
+            dataset.get_n_rand_gal(n=n)
         else:
             dataset.filter_by_f_agn_list(f_agn_list=f_agn, n=n)
 
@@ -375,6 +375,19 @@ class Tester:
         cleaned_image_arr = np.concatenate(cleaned_image_list, axis=0)  # (B, C, H, W)
         psf_predicted_arr = np.concatenate(psf_predicted_list, axis=0)  # (B, C, H, W)
         psf_arr = np.concatenate(psf_list, axis=0)  # (B, C, H, W)
+
+        # Make sure the shape is (B, 1, H, W) by selecting the first channel
+        source_arr = source_arr[:, 0:1, :, :]  # (B, 1, H, W)
+        target_arr = target_arr[:, 0:1, :, :]  # (B, 1, H, W)
+        cleaned_image_arr = cleaned_image_arr[:, 0:1, :, :]  # (B, 1, H, W)
+        psf_predicted_arr = psf_predicted_arr[:, 0:1, :, :]  # (B, 1, H, W)
+        psf_arr = psf_arr[:, 0:1, :, :]  # (B, 1, H, W)
+
+        # Keep only the first channel dimension (B, C, H, W) -> (B, 1, H, W)
+        # source_arr = np.expand_dims(source_arr[:,0,:,:], axis=1)  # (B, 1, H, W)
+        # target_arr = np.expand_dims(target_arr[:,0,:,:], axis=1)  # (B, 1, H, W)
+        # psf_predicted_arr = np.expand_dims(psf_predicted_arr[:,0,:,:], axis=1)  # (B, 1, H, W)
+        # psf_arr = np.expand_dims(psf_arr[:,0,:,:], axis=1)  # (B, 1, H, W)
 
         _, _, H, W = source_arr.shape
         FAGN = len(f_agn) if isinstance(f_agn, list) else 1
@@ -507,18 +520,28 @@ class Tester:
         inputs = inputs.to(self._device)
         targets = targets.to(self._device)
 
-        cleaned_image = self._model(inputs)
+        from data_pipeline.transforms import PerImageAsinhNormalize
+        normalizer = PerImageAsinhNormalize()
+
+        inputs, in_params = normalizer(inputs)
+        targets, tar_params = normalizer(targets)
+
+        outputs = self._model(inputs)
+
+        # outputs = normalizer.inverse(outputs, in_params)
+        # targets = normalizer.inverse(targets, tar_params)
+        # inputs = normalizer.inverse(inputs, in_params)
 
         if self._transform is not None:
-            residual = inputs - cleaned_image
+            residual = inputs - outputs
             residual = self._transform.inverse(residual, norm_params)
             inputs = self._transform.inverse(inputs, norm_params)
 
-            cleaned_image = inputs - residual
+            outputs = inputs - residual
 
         psf = inputs - targets
 
-        psf_predicted = inputs - cleaned_image
+        psf_predicted = inputs - outputs
 
-        return inputs, cleaned_image, targets, psf, psf_predicted
+        return inputs, outputs, targets, psf, psf_predicted
     

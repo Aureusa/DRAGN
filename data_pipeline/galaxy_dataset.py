@@ -31,14 +31,15 @@ import numpy as np
 import re
 import torch
 from torch.utils.data import Dataset
-from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
 
+from core.registry import DATASET_REGISTRY
 from data_pipeline.transforms import NormalizationParams, _BaseTransform
 from data_pipeline._telescopes_db import TELESCOPES_DB
 from data_pipeline.utils import load_fits_data, center_crop
-from utils import print_box
+from utils.printing import print_box
 from utils.validation import validate_numpy_array, validate_list, validate_type
+from utils.warnings import DRAGNWarning
+import random
 
 
 class _BaseDataset(Dataset, ABC):
@@ -206,16 +207,23 @@ class _BaseDataset(Dataset, ABC):
         self.st_pairs = new_st_pairs
         print_box(f"Filtered dataset to {len(self.st_pairs)} pairs with AGN fractions: {f_agn_list}.")
 
-    def filter_first_n(self, n: int) -> list[tuple[str, str]]:
+    def get_n_rand_gal(self, n: int) -> list[tuple[str, str]]:
         """
-        Filter the first n source-target pairs from the dataset.
+        Get n random source-target pairs from the dataset.
 
-        :param n: The number of source-target to filter.
+        :param n: The number of source-target pairs to select.
         :type n: int
+        :return: A list of n randomly selected source-target pairs.
+        :rtype: list[tuple[str, str]]
         """
         validate_type(n, int)
+
+        # Add a seed for reproducibility
+        random.seed(42)
         
-        self.st_pairs = self.st_pairs[:n]
+        if n > len(self.st_pairs):
+            n = len(self.st_pairs)
+        self.st_pairs = random.sample(self.st_pairs, n)
 
     def __len__(self) -> int:
         """
@@ -260,51 +268,6 @@ class GalaxyDataset(_BaseDataset):
         """
         super().__init__(source, target, transform, training)
         self._condition_on_f_agn = condition_on_f_agn
-
-    def _fits_below_threshold(self, pair, threshold):
-        input_data = load_fits_data(pair[0], max_val=True)
-        return input_data < threshold
-
-    def treshhold_by_pixel_value2(self, threshold: float = 1500, max_workers=1) -> None:
-        """
-        Threshold the dataset by pixel value using multiple cores.
-        """
-        validate_type(threshold, (int, float))
-
-        # Use ThreadPoolExecutor for parallel I/O
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(tqdm(
-                executor.map(lambda pair: self._fits_below_threshold(pair, threshold), self.st_pairs),
-                total=len(self.st_pairs)
-            ))
-
-        new_st_pairs = [pair for pair, keep in zip(self.st_pairs, results) if keep]
-
-        print_box(f"Filtered dataset to {len(new_st_pairs)} pairs with pixel value threshold < {threshold}.")
-        self.st_pairs = new_st_pairs
-
-    def treshhold_by_pixel_value(
-        self, threshold: float = 1500
-        ) -> None:
-        """
-        Threshold the dataset by pixel value.
-        This method filters the dataset to only include source-target pairs
-        where the source image has a maximum pixel value smaller than the given threshold.
-
-        :param threshold: The pixel value threshold to filter by.
-        :type threshold: float
-        """
-        validate_type(threshold, (int, float))
-        
-        new_st_pairs = []
-        for pair in tqdm(self.st_pairs):
-            input_data = load_fits_data(pair[0], max_val=True)
-            if input_data < threshold:
-                new_st_pairs.append(pair)
-
-        print_box(f"Filtered dataset to {len(new_st_pairs)} pairs with pixel value threshold < {threshold}.")
-        
-        self.st_pairs = new_st_pairs
 
     def __getitem__(self, idx: int) -> tuple:
         """
@@ -362,7 +325,7 @@ class GalaxyDataset(_BaseDataset):
         if match:
             f_agn = int(match.group(1)) / 100
         else:
-            f_agn = 0.0  # Default value if not found
+            f_agn = 0.44  # Default value if not found
         
         # Get the shape of the input tensor
         _, height, width = input_tensor.shape
@@ -399,12 +362,133 @@ class GalaxyDataset(_BaseDataset):
             data = torch.tensor(data, dtype=torch.float32).unsqueeze(0)
             # Normalize the images
             data, data_norm_param = self.transform(data)
+            return data, data_norm_param
+
+        # Convert the data to torch tensors
+        data = torch.tensor(data, dtype=torch.float32).unsqueeze(0) # (1, H, W)
+        return data, data_norm_param
+    
+
+class GalaxyDatasetPSFCond(_BaseDataset):
+    def __init__(
+        self,
+        source: list[str],
+        target: list[str],
+        transform: _BaseTransform|None = None,
+        training: bool = True,
+    ):
+        """
+        Initialize the GalaxyDataset class.
+        This class is a concrete implementation of the _BaseDataset class,
+        designed to load AGN and AGN-free images from FITS files.
+
+        :param source: The list of AGN image file paths.
+        :type source: list[str]
+        :param target: The list of AGN-free image file paths.
+        :type target: list[str]
+        :param transform: The transformation to apply to the images.
+        :type transform: _BaseTransform|None
+        :param training: Whether the dataset is for training or not.
+        :type training: bool
+        """
+        super().__init__(source, target, transform, training)
+
+    def __getitem__(self, idx: int) -> tuple:
+        """
+        Get the source-target pair at the given index.
+        The source is the AGN image and the target is the AGN-free image.
+
+        :param idx: The index of the source-target pair to retrieve.
+        :type idx: int
+        :return: A tuple containing the input tensor and target tensor.
+                 If training is True, it returns (input_tensor, target_tensor).
+                 If training is False, it returns (input_tensor, target_tensor, input_norm_params).
+        :rtype: tuple[torch.Tensor, torch.Tensor, NormalizationParams|None]
+        """
+        # Get the source-target pair at the given index.
+        input_filepath, target_filepath = self.st_pairs[idx]
+
+        # Load the AGN file and AGN-free file
+        input_data = load_fits_data(input_filepath)
+        target_data = load_fits_data(target_filepath)
+
+        # Preprocess the input data
+        input_tensor, input_norm_params = self._process_data(input_data, transform=True)
+        
+        if self.training:
+            target_tensor, _ = self._process_data(target_data, transform=True)
+
+            input_tensor = self._condition_input_tensor_on_psf(input_tensor, target_tensor)
+            return input_tensor, target_tensor
+        else:
+            target_tensor, _ = self._process_data(target_data, transform=False)
+
+            input_tensor = self._condition_input_tensor_on_psf_real(input_tensor)
+            DRAGNWarning().warn("Using empirical PSF loaded from the file system. If you are using mock dataset, change this in the GalaxyDatasetPSFCond().__getitem__() definition.")
+            return input_tensor, target_tensor, input_norm_params
+        
+    def _condition_input_tensor_on_psf(self, input_tensor: torch.Tensor, target_tensor: torch.Tensor) -> torch.Tensor:
+        psf_tensor = input_tensor - target_tensor
+
+        # Normalize the PSF tensor
+        eps = 1e-8
+        max_val = torch.max(torch.abs(psf_tensor))
+        psf_tensor_norm = psf_tensor / (max_val + eps)
+
+        input_tensor = torch.cat((input_tensor, psf_tensor_norm), dim=0)
+        return input_tensor
+
+    def _condition_input_tensor_on_psf_real(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        # 2D PSF data (np.ndarray)
+        psf = load_fits_data("/home4/s4683099/Deep-AGN-Clean/testing_folder/jwst_data/psf.fits")
+        psf = psf.astype(np.float32, copy=False)
+        
+        # Convert the PSF to a tensor
+        psf_tensor = torch.tensor(psf, dtype=torch.float32).unsqueeze(0)  # (1, H, W)
+
+        # Normalize the PSF tensor
+        eps = 1e-8
+        max_val = torch.max(torch.abs(psf_tensor))
+        psf_tensor_norm = psf_tensor / (max_val + eps)
+
+        input_tensor = torch.cat((input_tensor, psf_tensor_norm), dim=0)
+
+        return input_tensor
+    
+    def _process_data(self, data: np.ndarray, transform: bool = True) -> tuple[np.ndarray, NormalizationParams]:
+        """
+        Process the input data and return it as a tensor.
+
+        :param data: The input data to process.
+        :type data: np.ndarray
+        :param transform: Whether to apply the transformation to the data.
+        :type transform: bool
+        :return: A tuple containing the processed data as a tensor and the normalization parameters.
+        :rtype: tuple[np.ndarray, NormalizationParams]
+        """
+        # Initialize normalization parameters
+        data_norm_param = None
+
+        # Convert to 2D arrays if the AGN free image is 3D
+        if len(data.shape) == 3:
+            data = data[0]
+
+        # Convert the data to native-endian format before creating a tensor
+        data = data.astype(np.float32, copy=False)
+
+        data = center_crop(data, 128, 128)
+
+        if transform and self.transform is not None:
+            data = torch.tensor(data, dtype=torch.float32).unsqueeze(0)
+            # Normalize the images
+            data, data_norm_param = self.transform(data)
             data = data.squeeze(0)
             return data, data_norm_param
 
         # Convert the data to torch tensors
         data = torch.tensor(data, dtype=torch.float32).unsqueeze(0) # (1, H, W)
         return data, data_norm_param
+    
     
 class MockRealGalaxyDataset(_BaseDataset):
     """
@@ -504,6 +588,7 @@ class MockRealGalaxyDataset(_BaseDataset):
 
         if transform and self.transform is not None:
             data = torch.tensor(data, dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+
             # Normalize the images
             data, data_norm_param = self.transform(data)
             data = data.squeeze(0)

@@ -29,15 +29,15 @@ def validate_torch_tensor(tensor, ndim=None, allow_none=False):
         raise ValueError(f"Expected tensor with ndim={ndim}, got {tensor.dim()}")
     
 
-def validate_list(obj, elem_type=None, allow_none=False):
+def validate_list(obj, elem_type=None, allow_none=False, obj_name="list"):
     if obj is None and allow_none:
         return
     if not isinstance(obj, list):
-        raise TypeError(f"Expected list, got {type(obj)}")
+        raise TypeError(f"Expected {obj_name} to be a list, got {type(obj)}")
     if elem_type is not None:
         for i, elem in enumerate(obj):
             if not isinstance(elem, elem_type):
-                raise TypeError(f"Element {i} in list is not of type {elem_type}: {type(elem)}")
+                raise TypeError(f"Element {i} in {obj_name} is not of type {elem_type}: {type(elem)}")
             
 
 def validate_dict(obj, key_type=None, value_type=None, allow_none=False):

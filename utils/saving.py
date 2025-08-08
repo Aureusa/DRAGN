@@ -14,6 +14,16 @@ def load_pkl_file(full_filepath: str) -> Any:
     """
     if not full_filepath.endswith(".pkl"):
         full_filepath += ".pkl"
+    
+    # Get the DRAGN project directory (where this utils folder is located)
+    dragn_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # If the path is relative, make it relative to DRAGN directory
+    if not os.path.isabs(full_filepath):
+        full_filepath = os.path.join(dragn_dir, full_filepath)
+    
+    if not os.path.exists(full_filepath):
+        raise FileNotFoundError(f"File not found: {full_filepath}")
         
     with open(full_filepath, "rb") as file:
         data = pkl.load(file)
@@ -32,6 +42,13 @@ def save_pkl_file(data: Any, full_filepath: str):
 
     if not full_filepath.endswith(".pkl"):
         full_filepath += ".pkl"
+
+    # Get the DRAGN project directory (where this utils folder is located)
+    dragn_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # If the path is relative, make it relative to DRAGN directory
+    if not os.path.isabs(full_filepath):
+        full_filepath = os.path.join(dragn_dir, full_filepath)
 
     # Create the directory if it doesn't exist
     directory = os.path.dirname(full_filepath)

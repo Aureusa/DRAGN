@@ -50,6 +50,24 @@ class Plotter:
 
         print_box(f"Loss plot for '{filename}' saved successfully!")
 
+    def plot_image(self, img: np.ndarray, filename: str = "image_plot") -> None:
+        """
+        Plot a single image.
+
+        :param img: Image to plot. Should be a 2D numpy array.
+        :type img: np.ndarray
+        """
+        plt.imshow(
+            img,
+            cmap='gray',
+            norm=ImageNormalize(
+                img,
+                interval=PercentileInterval(99.5),
+                stretch=AsinhStretch())
+        )
+        plt.axis('off')
+        plt.savefig(f"{filename}.png")
+
     def plot_two_histograms(
         self,
         arr1: np.ndarray,
@@ -431,6 +449,15 @@ class Plotter:
                         cmap="gray"
                     )
                     ax[i, 2 + m if targets is not None else 1 + m].axis("off")
+
+                    flux_input = np.sum(sources[i, 0])
+                    flux_output = np.sum(outputs[i, m])
+                    ax[i, 2 + m if targets is not None else 1 + m].text(
+                        0.02, 0.08, f"Flux (input): {flux_input:.2f}\nFlux (output): {flux_output:.2f}",
+                        color="white", fontsize=12, fontweight="bold",
+                        ha="left", va="top", transform=ax[i, 2 + m if targets is not None else 1 + m].transAxes,
+                        bbox=dict(facecolor='black', alpha=0.5, boxstyle='round,pad=0.2')
+                    )
 
             # Set column titles
             if targets is not None:

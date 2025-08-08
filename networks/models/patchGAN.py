@@ -15,7 +15,7 @@ from utils.device import get_device
 from loggers_utils import TrainingLogger
 
 
-class PatchGANUNet(torch.nn.Module, BaseModel):
+class PatchGANUNet(BaseModel):
     def __init__(
             self,
             gen_features=(32, 32, 64, 128, 256, 32),
@@ -89,6 +89,12 @@ class PatchGANUNet(torch.nn.Module, BaseModel):
         self.real_label = 0.9
         self.fake_label = 0.0
 
+    def from_config(cls, config):
+        """
+        Config construction - this should be abstract
+        """
+        raise NotImplementedError("from_config method is not implemented for AttentionUNET")
+
     def forward(self, x):
         """
         Forward pass of the model.
@@ -145,7 +151,7 @@ class PatchGANUNet(torch.nn.Module, BaseModel):
         :checkpoints type: list[int]
         """
         # Initialize loggers
-        logger = TrainingLogger(data_path, adverserial_logger=True)
+        logger = TrainingLogger(data_path, adversarial_logger=True)
 
         # Initialize discriminator scheduler
         from model_training.lr_scheduler import DiscScheduler

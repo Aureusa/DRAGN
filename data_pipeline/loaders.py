@@ -26,6 +26,7 @@ import torch
 from torch.utils.data._utils.collate import default_collate
 from torch.utils.data import DataLoader
 
+from core.registry import LOADERS_REGISTRY
 from data_pipeline.galaxy_dataset import _BaseDataset
 from data_pipeline.transforms import _BaseTransform
 from utils.validation import validate_type
@@ -91,7 +92,7 @@ class _BaseLoader(DataLoader):
         return kwargs
 
 
-
+@LOADERS_REGISTRY.register("fits_loader")
 class FitsLoader(_BaseLoader):
     """
     Custom DataLoader that uses a custom collate function to handle
@@ -136,8 +137,17 @@ class FitsLoader(_BaseLoader):
             prefetch_factor=prefetch_factor,
             **kwargs
         )
-        if dataset.training is False:
-            self.collate_fn = self._custom_collate
+        # if dataset.training is False:
+        #     self.collate_fn = self._custom_collate
+        self.collate_fn = self._custom_collate_fn
+
+    def _custom_collate_fn(self, batch: list[tuple]) -> tuple:
+        return {
+            "input": torch.stack([item["input"] for item in batch]),
+            "target": torch.stack([item["target"] for item in batch]),
+            "input_norm_params": [item["input_norm_params"] for item in batch],
+            "target_norm_params": [item["target_norm_params"] for item in batch]
+        }
 
     def _custom_collate(self, batch: list[tuple]) -> tuple:
         """

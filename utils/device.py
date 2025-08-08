@@ -27,3 +27,4 @@ def get_device() -> torch.device:
     :rtype: torch.device
     """
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #return "cpu"

@@ -1,20 +1,12 @@
 import torch
-import torch.nn as nn
+from typing import Dict, Any
 from monai.networks.nets import BasicUNet
 
-import os
-from tqdm import tqdm
-from copy import deepcopy
-import pickle
-
-
 from networks.models._base_model import BaseModel
-from loggers_utils import TrainingLogger
-from utils import print_box
-from utils.device import get_device
+from core.registry import MODEL_REGISTRY
 
 
-# TODO: Impliment the train_model, save_model, and save_train_val_loss methods
+@MODEL_REGISTRY.register("unet")
 class UNet(BasicUNet, BaseModel):
     def __init__(
             self,
@@ -60,6 +52,23 @@ class UNet(BasicUNet, BaseModel):
             bias=bias,
             dropout=dropout,
             upsample=upsample
+        )
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any], **kwargs) -> "UNet":
+        """
+        Config construction - this should be abstract
+        """
+        return cls(
+            spatial_dims=config.get("spatial_dims", 2),
+            in_channels=config.get("in_channels", 1),
+            out_channels=config.get("out_channels", 1),
+            features=config.get("features", (32, 32, 64, 128, 256, 32)),
+            act=config.get("act", ('LeakyReLU', {'inplace': True, 'negative_slope': 0.1})),
+            norm=config.get("norm", ('instance', {'affine': True})),
+            bias=config.get("bias", True),
+            dropout=config.get("dropout", 0.1),
+            upsample=config.get("upsample", 'deconv')
         )
 
     def forward(self, x):

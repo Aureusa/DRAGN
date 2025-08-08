@@ -14,7 +14,7 @@ states, and saves them to disk for later analysis or resuming training.
 
 **Important:**
 - Specify a directory for saving logs and optimizer states when initializing.
-- For GANs, set `adverserial_logger=True` to log discriminator losses and states.
+- For GANs, set `adversarial_logger=True` to log discriminator losses and states.
 - For more details, see the class docstring or contact the maintainers.
 
 Example usage:
@@ -40,7 +40,7 @@ for epoch in range(num_epochs):
     )
 
 # For adversarial (GAN) training:
-logger_gan = TrainingLogger(save_dir="./logs_gan", adverserial_logger=True)
+logger_gan = TrainingLogger(save_dir="./logs_gan", adversarial_logger=True)
 
 for epoch in range(num_epochs):
     train_loss = ...
@@ -68,6 +68,7 @@ from pathlib import Path
 from loggers_utils.execution_logger import log_execution
 from utils import print_box
 from utils.validation import validate_type
+from utils.device import get_device
 
 
 class TrainingLogger:
@@ -80,7 +81,7 @@ class TrainingLogger:
     It also provides methods to retrieve the optimizer states for resuming training.
     """
     @log_execution("Initializing TrainingLogger...", "TrainingLogger initialized successfully!")
-    def __init__(self, save_dir, adverserial_logger=False):
+    def __init__(self, save_dir, adversarial_logger=False):
         """
         Initializes the TrainingLogger. This class is responsible for logging the training history,
         including training and validation losses, best validation loss, and optimizer states.
@@ -89,12 +90,12 @@ class TrainingLogger:
 
         :param save_dir: Directory where the training history will be saved.
         :type save_dir: str
-        :param adverserial_logger: Whether to log adversarial losses (for GANs).
-        :type adverserial_logger: bool
+        :param adversarial_logger: Whether to log adversarial losses (for GANs).
+        :type adversarial_logger: bool
         """
-        self._adverserial_logger = adverserial_logger
+        self._adversarial_logger = adversarial_logger
         
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = get_device()
         self.save_dir = Path(save_dir)
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -103,6 +104,46 @@ class TrainingLogger:
 
         self._load_history()
 
+    def log(self, metrics: dict):
+        """
+        Logs the training and validation metrics for the current epoch.
+        This method is typically called at the end of each epoch during training.
+
+        :param train_metrics: Dictionary containing training metrics.
+        :type train_metrics: dict
+        :param val_metrics: Dictionary containing validation metrics.
+        :type val_metrics: dict
+        :param epoch: Current epoch number.
+        :type epoch: int
+        """
+        validate_type(metrics, dict)
+
+        # Log training metrics
+        first_val_metric = False
+        for key, value in metrics.items():
+            if key not in self.history:
+                self.history[key] = []
+            self.history[key].append(value)
+
+            # Check if this is the first validation metric is smaller than the best val loss, 
+            # assumes first val metric is the priority one
+            if (
+                "val_loss" in key
+                and not first_val_metric
+                and value < self.history.get("best_val_loss", float("inf"))
+                ):
+                self.history["best_val_loss"] = value
+                first_val_metric = True
+
+        # Update epoch number
+        if "epoch" not in self.history:
+            self.history["epoch"] = []
+        if len(self.history["epoch"]) == 0:
+            self.history["epoch"].append(1)
+        else:
+            self.history["epoch"].append(self.history["epoch"][-1] + 1)
+
+    # DEPRICATED
     @log_execution(f"Logging epoch...", "Logging completed successfully!")
     def log_epoch(
             self,
@@ -145,14 +186,26 @@ class TrainingLogger:
         validate_type(train_loss_D, float, allow_none=True)
         validate_type(val_loss_D, float, allow_none=True)
 
+        if "train_loss" not in self.history:
+            self.history["train_loss"] = []
+        if "val_loss" not in self.history:
+            self.history["val_loss"] = []
+        if "best_val_loss" not in self.history:
+            self.history["best_val_loss"] = float("inf")
         self.history["train_loss"].append(train_loss)
         self.history["val_loss"].append(val_loss)
 
-        if self._adverserial_logger and train_loss_D is not None:
+        if self._adversarial_logger and train_loss_D is not None:
+            if "train_loss_D" not in self.history:
+                self.history["train_loss_D"] = []
+            if "val_loss_D" not in self.history:
+                self.history["val_loss_D"] = []
             self.history["train_loss_D"].append(train_loss_D)
             self.history["val_loss_D"].append(val_loss_D)
 
         # Update epoch number
+        if "epoch" not in self.history:
+            self.history["epoch"] = []
         if len(self.history["epoch"]) == 0:
             self.history["epoch"].append(1)
         else:
@@ -188,6 +241,18 @@ class TrainingLogger:
         if len(self.history["epoch"]) == 0:
             return 0
         return self.history["epoch"][-1]
+    
+    def get_optimizers_state(self):
+        """
+        Returns the state of the optimizer used for training.
+
+        :return: The state of the optimizer.
+        :rtype: dict
+        """
+        if not self._adversarial_logger:
+            return self.optimizer_state
+        else:
+            return tuple(self.optimizer_state, self.optimizer_state2)
 
     def get_optimizer_state(self):
         """
@@ -197,7 +262,7 @@ class TrainingLogger:
         :rtype: dict
         """
         return self.optimizer_state
-    
+
     def get_optimizer2_state(self):
         """
         Returns the state of the second optimizer (if it exists),
@@ -261,37 +326,21 @@ class TrainingLogger:
         """
         # Check if the history file exists
         if not (self.save_dir / "history.json").exists():
-            self.history = {
-                "train_loss": [],
-                "val_loss": [],
-                "best_val_loss": float("inf"),
-                "epoch": [],
-            }
-
-            if self._adverserial_logger:
-                self.history["train_loss_D"] = []
-                self.history["val_loss_D"] = []
+            self.history = {}
+            self.history["best_val_loss"] = float("inf")
 
             self.optimizer_state = None
             self.optimizer_state2 = None
             info = f"History file not found. Starting a new training session."
             print_box(info)
+            self.new = True
             return
         
         with open(self.save_dir / "history.json", "r") as f:
             history = json.load(f)
 
-        self.history = {
-            "train_loss": history["train_loss"],
-            "val_loss": history["val_loss"],
-            "best_val_loss": history["best_val_loss"],
-            "epoch": history["epoch"],
-        }
+        self.history = history
 
-        if self._adverserial_logger:
-            self.history["train_loss_D"] = history.get("train_loss_D", [])
-            self.history["val_loss_D"] = history.get("val_loss_D", [])
-        
         # Load optimizer state
         opt_state_path = self.save_dir / "optimizer_state.pth"
         if opt_state_path.exists():
@@ -309,3 +358,5 @@ class TrainingLogger:
         info += f"\nEpochs: {len(self.history['epoch'])}"
         info += f"\nBest validation loss: {self.history['best_val_loss']}"
         print_box(info)
+
+        self.new = False

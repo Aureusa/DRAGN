@@ -4,7 +4,10 @@ from typing import Any
 from abc import ABC, abstractmethod
 import torch.nn.functional as F
 
+from core.registry import LOSS_REGISTRY
+from core.component import Component
 from utils.validation import check_4tensor_inputs
+from utils.warnings import DRAGNWarning
 
 
 def get_loss_function(loss_name: str) -> None:
@@ -29,15 +32,30 @@ def _get_avaliable_loss_funcstions() -> dict:
         'Perceptual Loss': PerceptualLoss(),
         'Smooth L1 Loss': SmoothL1Loss(),
         "Weighted Squared MSE Loss": WeightedSquaredMSELoss(),
+        "L1 + Weighted L2 + FRF Loss": L1plusWeightedL2plusFRF(),
     }
     return loss_functions
 
     
-class Loss(ABC):
+class Loss(Component):
     """
     Abstract Loss class that enforces the characteristic
     forward pass for all loss functions.
     """
+    @classmethod
+    def from_config(
+        cls, params: dict[str, Any]
+    ) -> "Loss":
+        """
+        Create a loss function from the configuration.
+        
+        :param config: Configuration dictionary for the loss function.
+        :type config: dict[str, Any]
+        :return: An instance of the loss function.
+        :rtype: Loss
+        """
+        return cls(**params)
+
     @abstractmethod
     def forward(
         self,
@@ -61,7 +79,19 @@ class Loss(ABC):
         """
         pass
 
+    def _validate_reduction(self, reduction: str, possible_reductions: list[str]) -> None:
+        """
+        Validate the reduction mode for the loss function.
 
+        :param reduction: the reduction mode to validate
+        :param possible_reductions: list of possible reduction modes
+        """
+        if reduction not in possible_reductions:
+            raise ValueError(f"Invalid reduction mode '{reduction}'. "
+                             f"Expected one of: {possible_reductions}")
+        
+
+@LOSS_REGISTRY.register("perceptual_loss")
 class PerceptualLoss(nn.Module, Loss):
     """
     Perceptual Loss based on VGG16 features.
@@ -194,6 +224,7 @@ class PerceptualLoss(nn.Module, Loss):
         return batch_tensor
 
 
+@LOSS_REGISTRY.register("mse_loss")
 class MSELoss(nn.Module, Loss):
     """
     Mean Squared Error (MSE) Loss function.
@@ -235,6 +266,7 @@ class MSELoss(nn.Module, Loss):
         return self._loss_func(y_pred, y_true)
 
 
+@LOSS_REGISTRY.register("weighted_squared_mse_loss")
 class WeightedSquaredMSELoss(nn.Module, Loss):
     """
     Weighted Squared Mean Squared Error (MSE) Loss function.
@@ -299,6 +331,7 @@ class WeightedSquaredMSELoss(nn.Module, Loss):
         return loss
         
 
+@LOSS_REGISTRY.register("l1_loss")
 class L1Loss(nn.Module, Loss):
     """
     L1 Loss function.
@@ -337,6 +370,7 @@ class L1Loss(nn.Module, Loss):
         return torch.mean(torch.abs(y_pred - y_true))
     
 
+@LOSS_REGISTRY.register("smooth_l1_loss")
 class SmoothL1Loss(nn.Module, Loss):
     """
     Smooth L1 Loss function.
@@ -383,6 +417,7 @@ class SmoothL1Loss(nn.Module, Loss):
         return self._loss_func(y_pred, y_true)
     
 
+@LOSS_REGISTRY.register("l1_plus_weighted_l2")
 class L1plusWeightedL2(nn.Module, Loss):
     """
     L1 Loss combined with Weighted Squared MSE Loss.
@@ -430,5 +465,133 @@ class L1plusWeightedL2(nn.Module, Loss):
         weighted_mse_loss = self.weighted_mse_loss(x, y_pred, y_true, psf)
         
         loss = self.alpha * l1_loss + self.beta * weighted_mse_loss
+        return loss
+    
+
+@LOSS_REGISTRY.register("l1_plus_weighted_l2_plus_frf")
+class L1plusWeightedL2plusFRF(nn.Module, Loss):
+    """
+    L1 Loss combined with Weighted Squared MSE Loss.
+    It is defined as:
+    .. math::
+        L_{L1 + wL2}(y_{pred}, y_{true}, PSF) = \alpha * L_{L1}(y_{pred}, y_{true}) + \beta * L_{wMSE}(y_{pred}, y_{true}, PSF) + \gamma * L_{FRF}(y_{pred}, y_{true})
+    
+    where :math:`\alpha` and :math:`\beta` are hyperparameters that control the contribution of each loss.
+    """
+    def __init__(self, alpha: float = 1.0, beta: float = 0.2, gamma: float = 0.2, reduction="mean"):
+        super(L1plusWeightedL2plusFRF, self).__init__()
+        self._validate_reduction(reduction, ["mean", "none"])
+
+        DRAGNWarning().warn("Reduction mode is not implemented in this loss function. The reduction mode will be mean by default.")
+        
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        
+        self.reduction = reduction
+
+        # Initialize the L1 Loss
+        self.l1_loss = nn.L1Loss()
+
+    def __str__(self):
+        return "L1 + Weighted L2 + FRF Loss"
+
+    @check_4tensor_inputs
+    def forward(
+            self,
+            x: torch.Tensor,
+            y_pred: torch.Tensor,
+            y_true: torch.Tensor,
+            psf: torch.Tensor
+        ) -> torch.Tensor:
+        """
+        Forward pass for the combined L1, Weighted Squared L2 and FRF
+        loss function.
+        
+        :param x: Input image tensor (not used in this loss).
+        :type x: torch.Tensor
+        :param y_pred: Predicted image tensor.
+        :type y_pred: torch.Tensor
+        :param y_true: True image tensor.
+        :type y_true: torch.Tensor
+        :param psf: Point spread function tensor.
+        :type psf: torch.Tensor
+        :return: Computed combined loss.
+        :rtype: torch.Tensor
+        """
+        l1_loss = self.l1_loss(y_pred, y_true)
+        weighted_mse_loss = self._weighted_l2(y_pred, y_true, psf)
+        frf = self._flux_residual_fraction(y_pred, y_true)
+
+        loss = self.alpha * l1_loss + self.beta * weighted_mse_loss + self.gamma * frf
+        return loss
+    
+    def _flux_residual_fraction(
+            self,
+            pred: torch.Tensor,
+            true: torch.Tensor
+        ) -> torch.Tensor:
+        """
+        Computes the FRF for the estimate and the ground truth.
+
+        :param pred: the predicted image
+        :type pred: torch.Tensor
+        :param true: the true image
+        :type true: torch.Tensor
+        :return: Flux Residual Fraction value as a tensor.
+        :rtype: torch.Tensor
+        """
+        # Compute the fluxes
+        recovered_flux = pred.sum(dim=(1, 2, 3)) # shape: (B,)
+        true_flux = true.sum(dim=(1, 2, 3)) # shape: (B,)
+
+        frf = recovered_flux / (true_flux + 1e-8) - 1   # avoid div/0; shape: (B,)
+        frf = torch.abs(frf)  # take absolute value
+        frf = torch.mean(frf)  # mean over the batch
+        return frf
+    
+    def _weighted_l2(
+            self,
+            y_pred: torch.Tensor,
+            y_true: torch.Tensor,
+            psf: torch.Tensor
+        ) -> torch.Tensor:
+        """
+        Weigted MSE Loss is defined as:
+        .. math::
+            L_{wMSE}(y_{pred}, y_{true}, PSF) = \frac{1}{N} \sum_{i=1}^{N} w_i (y_{pred,i} - y_{true,i})^2
+            where :math:`w_i = \frac{PSF_i^2}{max(PSF^2) + \epsilon}` and :math:`\epsilon`
+            is a small constant to avoid division by zero.
+
+        :param y_pred: Predicted image tensor.
+        :type y_pred: torch.Tensor
+        :param y_true: True image tensor.
+        :type y_true: torch.Tensor
+        :param psf: Point spread function tensor.
+        :type psf: torch.Tensor
+        :return: Computed weighted squared MSE loss.
+        :rtype: torch.Tensor
+        """
+        # Square the PSF
+        psf = psf ** 2
+        
+        # Create weights based on the PSF
+        max_psf = torch.amax(psf, dim=(1, 2, 3), keepdim=True)
+        weights = psf / (max_psf + 1e-8)
+
+        # Find batch indices where max == 0
+        zero_mask = (max_psf == 0).squeeze(-1).squeeze(-1).squeeze(-1)  # shape (B,)
+
+        # Set all weights for those batches to 1
+        weights[zero_mask] = 1.0
+
+        weights = torch.clamp(weights, min=1e-6)
+
+        # Compute the squared difference and apply weights
+        squared_diff = (y_pred - y_true) ** 2
+        weighted_squared_diff = squared_diff * weights
+
+        # Reduce to mean
+        loss = weighted_squared_diff.mean()
         return loss
     
