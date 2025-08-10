@@ -1,0 +1,48 @@
+# Example configuration for TestExperimentConfig
+# Generated automatically - modify as needed
+
+testing_config:
+# Filename of the saved model (without .pth extension)
+  model_filename: "unet_step_70"
+
+  # The folder to store data relevant to training
+  data_folder: "/home4/s4683099/DRAGN/experiments/test1"
+
+  # The strategy to use for testing
+  testing_strategy: "standard"
+
+  # Whether to print verbose output
+  verbose: true
+
+
+model_settings_config:
+  # Model architecture type
+  architecture: "unet"
+
+
+test_data_config:
+  # Type of dataset
+  dataset_type: "galaxy_dataset"
+
+  # Type of data loader
+  loader_type: "fits_loader"
+
+  # Path to the dataset
+  data_path: "/home4/s4683099/DRAGN/testing_folder/jwst_data/test_data.pkl"
+
+  # Batch size
+  batch_size: 4
+
+  # Number of workers for data loading
+  num_workers: 0
+
+  # Additional dataset parameters
+  dataset_params: {}
+
+  # Additional data loader parameters
+  loaders_params: {}
+
+
+metrics_config:
+  # List of metrics to evaluate
+  metrics: ["flux_residual_fraction", "ssim"]

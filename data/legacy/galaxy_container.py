@@ -1,4 +1,4 @@
-from data_pipeline.utils import load_fits_data, center_crop
+from data.utils import load_fits_data, center_crop
 import numpy as np
 import torch
 from utils import print_box

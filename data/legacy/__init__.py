@@ -58,25 +58,25 @@ Notes:
 - The FilepathGetter, ForgeData, and GalaxyDataset classes are tailored for the DRAGN data structure and may not work with arbitrary data.
 - For more details, see the documentation for each class or contact the maintainers.
 """
-from data_pipeline._telescopes_db import TELESCOPES_DB
-from data_pipeline.data_analysis import DataAnalysisEngine
-from data_pipeline.data_split import (
+from ._telescopes_db import TELESCOPES_DB
+from .data_analysis import DataAnalysisEngine
+from .data_split import (
     create_source_target_pairs,
     test_train_val_split,
     ForgeData
 )
-from data_pipeline.galaxy_dataset import (
+from .galaxy_dataset import (
     _BaseDataset,
     GalaxyDataset,
     GalaxyDatasetPSFCond
 )
-from data_pipeline.getter import FilepathGetter
-from data_pipeline.loaders import _BaseLoader, FitsLoader
-from data_pipeline.transforms import (
+from .getter import FilepathGetter
+from .loaders import _BaseLoader, FitsLoader
+from .transforms import (
     _BaseTransform,
     PerImageMinMax,
     PerImageNormalize,
     NormalizationParams,
 )
-import data_pipeline.transforms
-from data_pipeline import galaxy_dataset_new
+import data.transforms
+from data.legacy import galaxy_dataset

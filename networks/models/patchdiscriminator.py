@@ -1,11 +1,8 @@
-import os
-import torch
 import torch.nn as nn
 
 
 from networks.blocks import ConvBlock, ConvBlockWithAttention
 from networks.models._base_model import BaseModel
-from utils import print_box
 
 
 class PatchDiscriminatorWithAttention(BaseModel):

@@ -8,14 +8,14 @@ from astro_pipeline import (
     Photometry,
     StructuralParamsRegistry
 )
-from data_pipeline import (
+from data import (
     _BaseTransform,
     _BaseLoader,
 )
-from networks.models import AVALAIBLE_MODELS
+from networks.models import AVAILABLE_MODELS
 from model_testing.metrics import get_metrics
 from model_testing.performance_analysis import PAdict
-from loggers_utils import log_execution
+from utils.log_utils import log_execution
 from utils import (
     save_pkl_file,
     print_box
@@ -71,10 +71,10 @@ class Tester:
             self._model = model # DEPRICATED
         else:
             # Initialize the model
-            if model_type not in AVALAIBLE_MODELS:
+            if model_type not in AVAILABLE_MODELS:
                 raise ValueError(f"Model type '{model_type}' is not supported.")
             
-            self._model = AVALAIBLE_MODELS[model_type](**kwargs)
+            self._model = AVAILABLE_MODELS[model_type](**kwargs)
 
             try:
                 # Load the model
@@ -520,7 +520,7 @@ class Tester:
         inputs = inputs.to(self._device)
         targets = targets.to(self._device)
 
-        from data_pipeline.transforms import PerImageAsinhNormalize
+        from data.transforms import PerImageAsinhNormalize
         normalizer = PerImageAsinhNormalize()
 
         inputs, in_params = normalizer(inputs)

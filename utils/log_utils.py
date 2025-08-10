@@ -1,21 +1,3 @@
-"""
-NOTE FOR USERS:
-
-This module provides the `log_execution` decorator for logging the start and
-end of function execution with custom messages.
-It prints the messages in a visually distinct box format for easier tracking
-of code execution in the console.
-
-Typical usage:
-    from loggers_utils.execution_logger import log_execution
-
-    @log_execution("Starting...", "Done!")
-    def my_function():
-        ...
-
-Use this decorator to add informative logs to your functions or methods.
-This is just a utility module and does not contain any complex logic or data processing.
-"""
 import functools
 
 

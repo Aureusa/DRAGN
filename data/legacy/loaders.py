@@ -27,8 +27,7 @@ from torch.utils.data._utils.collate import default_collate
 from torch.utils.data import DataLoader
 
 from core.registry import LOADERS_REGISTRY
-from data_pipeline.galaxy_dataset import _BaseDataset
-from data_pipeline.transforms import _BaseTransform
+from data.legacy.galaxy_dataset import _BaseDataset
 from utils.validation import validate_type
 
 

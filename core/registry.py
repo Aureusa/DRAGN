@@ -1,4 +1,4 @@
-from typing import Dict, Type, Any, Callable, TypeVar, Union
+from typing import Dict, Type, Any, Callable, TypeVar, Union, List
 from .component import Component
 
 T = TypeVar('T', bound=Component)
@@ -31,7 +31,7 @@ class Registry:
             available = list(self._registry.keys()) + list(self._factories.keys())
             raise ValueError(f"Unknown {self.name}: {name}. Available: {available}")
     
-    def list_available(self) -> list[str]:
+    def list_available(self) -> List[str]:
         """List all available components"""
         return list(self._registry.keys()) + list(self._factories.keys())
     
@@ -53,3 +53,5 @@ TRANSFORM_REGISTRY = Registry("transform")
 LOSS_REGISTRY = Registry("loss")
 OPTIMIZER_REGISTRY = Registry("optimizer")
 TRAINING_STRATEGY_REGISTRY = Registry("training_strategy")
+TESTING_STRATEGY_REGISTRY = Registry("testing_strategy")
+METRICS_REGISTRY = Registry("metrics")

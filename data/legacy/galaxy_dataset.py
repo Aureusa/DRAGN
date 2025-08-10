@@ -33,9 +33,9 @@ import torch
 from torch.utils.data import Dataset
 
 from core.registry import DATASET_REGISTRY
-from data_pipeline.transforms import NormalizationParams, _BaseTransform
-from data_pipeline._telescopes_db import TELESCOPES_DB
-from data_pipeline.utils import load_fits_data, center_crop
+from data.transforms import NormalizationParams, _BaseTransform
+from data._telescopes_db import TELESCOPES_DB
+from data.utils import load_fits_data, center_crop
 from utils.printing import print_box
 from utils.validation import validate_numpy_array, validate_list, validate_type
 from utils.warnings import DRAGNWarning

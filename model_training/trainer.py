@@ -3,8 +3,8 @@ import inspect
 import torch
 from tqdm import tqdm
 
-from data_pipeline import _BaseLoader
-from networks.models import AVALAIBLE_MODELS, BaseModel
+from data import _BaseLoader
+from networks.models import AVAILABLE_MODELS, BaseModel
 from model_training.loss_functions import get_loss_function
 from utils import (
     print_box,
@@ -16,7 +16,7 @@ from loggers_utils import TrainingLogger
 from model_testing import Tester # DEPRICATED
 from model_testing.plotter import Plotter # DEPRICATED
 
-from data_pipeline.transforms import PerImageAsinhNormalize
+from data.transforms import PerImageAsinhNormalize
 
 
 class Trainer:
@@ -34,7 +34,7 @@ class Trainer:
         This class is responsible for training the model with the specified parameters.
         
         :param model_type: The type of model to train. All avaliable models should be in the
-        AVALAIBLE_MODELS dict in network.models.
+        AVAILABLE_MODELS dict in network.models.
         :type model_type: str
         :param model_filename: The filename to save the trained model.
         :type model_filename: str
@@ -53,10 +53,10 @@ class Trainer:
         validate_type(train_loader, _BaseLoader, "train_loader")
         validate_type(val_loader, _BaseLoader, "val_loader")
 
-        if model_type not in AVALAIBLE_MODELS:
-            raise ValueError(f"Model type {model_type} is not available. Choose from {list(AVALAIBLE_MODELS.keys())}.")
+        if model_type not in AVAILABLE_MODELS:
+            raise ValueError(f"Model type {model_type} is not available. Choose from {list(AVAILABLE_MODELS.keys())}.")
         
-        self.model: BaseModel = AVALAIBLE_MODELS[model_type](**kwargs)
+        self.model: BaseModel = AVAILABLE_MODELS[model_type](**kwargs)
 
         self._model_type = model_type
         self._model_filename = model_filename

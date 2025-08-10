@@ -1,39 +1,12 @@
 import torch
 import torch.nn as nn
 from typing import Any
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import torch.nn.functional as F
 
+from core.registry import LOSS_REGISTRY
 from core.component import Component
-from utils.validation import check_4tensor_inputs
 from utils.warnings import DRAGNWarning
-
-
-def get_loss_function(loss_name: str) -> None:
-    loss_functions = _get_avaliable_loss_funcstions()
-    
-    if loss_name not in loss_functions:
-        raise ValueError(f"Loss function '{loss_name}' is not recognized.")
-    
-    # Set the loss function based on the provided name
-    loss_func = loss_functions[loss_name]
-
-    return loss_func
-
-
-# LAST UPDATE: 2025-07-05
-# Make sure to update this once new loss functions are added
-def _get_avaliable_loss_funcstions() -> dict:
-    loss_functions = {
-        'L1 + Weighted L2 Loss': L1plusWeightedL2(),
-        'MSE Loss': MSELoss(),
-        'L1 Loss': L1Loss(),
-        'Perceptual Loss': PerceptualLoss(),
-        'Smooth L1 Loss': SmoothL1Loss(),
-        "Weighted Squared MSE Loss": WeightedSquaredMSELoss(),
-        "L1 + Weighted L2 + FRF Loss": L1plusWeightedL2plusFRF(),
-    }
-    return loss_functions
 
     
 class Loss(Component):
@@ -58,23 +31,20 @@ class Loss(Component):
     @abstractmethod
     def forward(
         self,
-        x: torch.Tensor,
-        y_pred: torch.Tensor,
-        y_true: torch.Tensor,
-        psf: torch.Tensor
+        input: torch.Tensor,
+        output: torch.Tensor,
+        target: torch.Tensor
     ) -> Any:
         """
         Forward pass for the loss function with its specific parameters
         to be implemented by the subclasses.
 
-        :param x: the input image
-        :type x: torch.Tensor
-        :param y_pred: the predicted image
-        :type y_pred: torch.Tensor
-        :param y_true: the true image
-        :type y_true: torch.Tensor
-        :param psf: the point spread function
-        :type psf: torch.Tensor
+        :param input: the input image
+        :type input: torch.Tensor
+        :param output: the predicted image
+        :type output: torch.Tensor
+        :param target: the true image
+        :type target: torch.Tensor
         """
         pass
 
@@ -90,6 +60,7 @@ class Loss(Component):
                              f"Expected one of: {possible_reductions}")
         
 
+@LOSS_REGISTRY.register("perceptual_loss")
 class PerceptualLoss(nn.Module, Loss):
     """
     Perceptual Loss based on VGG16 features.
@@ -124,29 +95,25 @@ class PerceptualLoss(nn.Module, Loss):
     def __str__(self):
         return "Perceptual Loss"
     
-    @check_4tensor_inputs
     def forward(
             self,
-            x: torch.Tensor,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
-            psf: torch.Tensor
+            input: torch.Tensor,
+            output: torch.Tensor,
+            target: torch.Tensor,
         ) -> torch.Tensor:
         """
         Forward pass for the perceptual loss function.
 
-        :param x: Input image tensor.
-        :type x: torch.Tensor
-        :param y_pred: Predicted image tensor.
-        :type y_pred: torch.Tensor
-        :param y_true: True image tensor.
-        :type y_true: torch.Tensor
-        :param psf: Point spread function tensor (not used in this loss).
-        :type psf: torch.Tensor
+        :param input: Input image tensor.
+        :type input: torch.Tensor
+        :param output: Predicted image tensor.
+        :type output: torch.Tensor
+        :param target: True image tensor.
+        :type target: torch.Tensor
         :return: Computed perceptual loss.
         :rtype: torch.Tensor
         """
-        return self._perceptual_loss(y_true, y_pred)
+        return self._perceptual_loss(target, output)
     
     def _perceptual_loss(
             self,
@@ -183,7 +150,7 @@ class PerceptualLoss(nn.Module, Loss):
         ) -> list[torch.Tensor]:
         """
         Forward pass of the VGG16 model.
-        
+
         :param x: Input tensor.
         :type x: torch.Tensor
         :return: List of feature maps from the selected layers.
@@ -222,6 +189,7 @@ class PerceptualLoss(nn.Module, Loss):
         return batch_tensor
 
 
+@LOSS_REGISTRY.register("mse_loss")
 class MSELoss(nn.Module, Loss):
     """
     Mean Squared Error (MSE) Loss function.
@@ -238,31 +206,28 @@ class MSELoss(nn.Module, Loss):
     def __str__(self):
         return "MSE Loss"
 
-    @check_4tensor_inputs
     def forward(
             self,
-            x: torch.Tensor,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
-            psf: torch.Tensor
+            input: torch.Tensor,
+            output: torch.Tensor,
+            target: torch.Tensor
         ) -> torch.Tensor:
         """
         Forward pass for the MSE loss function.
 
-        :param x: Input image tensor.
-        :type x: torch.Tensor
-        :param y_pred: Predicted image tensor.
-        :type y_pred: torch.Tensor
-        :param y_true: True image tensor.
-        :type y_true: torch.Tensor
-        :param psf: Point spread function tensor (not used in this loss).
-        :type psf: torch.Tensor
+        :param input: Input image tensor.
+        :type input: torch.Tensor
+        :param output: Predicted image tensor.
+        :type output: torch.Tensor
+        :param target: True image tensor.
+        :type target: torch.Tensor
         :return: Computed MSE loss.
         :rtype: torch.Tensor
         """
-        return self._loss_func(y_pred, y_true)
+        return self._loss_func(output, target)
 
 
+@LOSS_REGISTRY.register("weighted_squared_mse_loss")
 class WeightedSquaredMSELoss(nn.Module, Loss):
     """
     Weighted Squared Mean Squared Error (MSE) Loss function.
@@ -284,27 +249,25 @@ class WeightedSquaredMSELoss(nn.Module, Loss):
     def __str__(self):
         return "Weighted Squared MSE Loss"
 
-    @check_4tensor_inputs
     def forward(
             self,
-            x: torch.Tensor,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
-            psf: torch.Tensor
+            input: torch.Tensor,
+            output: torch.Tensor,
+            target: torch.Tensor
         ) -> torch.Tensor:
         """
         Forward pass for the weighted squared MSE loss function.
-        :param x: Input image tensor (not used in this loss).
-        :type x: torch.Tensor
-        :param y_pred: Predicted image tensor.
-        :type y_pred: torch.Tensor
-        :param y_true: True image tensor.
-        :type y_true: torch.Tensor
-        :param psf: Point spread function tensor.
-        :type psf: torch.Tensor
+        :param input: Input image tensor (not used in this loss).
+        :type input: torch.Tensor
+        :param output: Predicted image tensor.
+        :type output: torch.Tensor
+        :param target: True image tensor.
+        :type target: torch.Tensor
         :return: Computed weighted squared MSE loss.
         :rtype: torch.Tensor
         """
+        psf = input - target
+
         # Square the PSF
         psf = psf ** 2
         
@@ -320,13 +283,14 @@ class WeightedSquaredMSELoss(nn.Module, Loss):
         weights = torch.clamp(weights, min=1e-6)
 
         # Compute the squared difference and apply weights
-        squared_diff = (y_pred - y_true) ** 2
+        squared_diff = (output - target) ** 2
         weighted_squared_diff = squared_diff * weights
 
         loss = weighted_squared_diff.mean()
         return loss
         
 
+@LOSS_REGISTRY.register("l1_loss")
 class L1Loss(nn.Module, Loss):
     """
     L1 Loss function.
@@ -340,31 +304,28 @@ class L1Loss(nn.Module, Loss):
     def __str__(self):
         return "L1 Loss"
 
-    @check_4tensor_inputs
     def forward(
             self,
-            x: torch.Tensor,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
-            psf: torch.Tensor
+            input: torch.Tensor,
+            output: torch.Tensor,
+            target: torch.Tensor
         ) -> torch.Tensor:
         """
         Forward pass for the L1 loss function.
 
-        :param x: Input image tensor (not used in this loss).
-        :type x: torch.Tensor
-        :param y_pred: Predicted image tensor.
-        :type y_pred: torch.Tensor
-        :param y_true: True image tensor.
-        :type y_true: torch.Tensor
-        :param psf: Point spread function tensor (not used in this loss).
-        :type psf: torch.Tensor
+        :param input: Input image tensor (not used in this loss).
+        :type input: torch.Tensor
+        :param output: Predicted image tensor.
+        :type output: torch.Tensor
+        :param target: True image tensor.
+        :type target: torch.Tensor
         :return: Computed L1 loss.
         :rtype: torch.Tensor
         """
-        return torch.mean(torch.abs(y_pred - y_true))
+        return torch.mean(torch.abs(output - target))
     
 
+@LOSS_REGISTRY.register("smooth_l1_loss")
 class SmoothL1Loss(nn.Module, Loss):
     """
     Smooth L1 Loss function.
@@ -386,31 +347,28 @@ class SmoothL1Loss(nn.Module, Loss):
     def __str__(self):
         return "Smooth L1 Loss"
 
-    @check_4tensor_inputs
     def forward(
             self,
-            x: torch.Tensor,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
-            psf: torch.Tensor
+            input: torch.Tensor,
+            output: torch.Tensor,
+            target: torch.Tensor
         ) -> torch.Tensor:
         """
         Forward pass for the Smooth L1 loss function.
 
-        :param x: Input image tensor (not used in this loss).
-        :type x: torch.Tensor
-        :param y_pred: Predicted image tensor.
-        :type y_pred: torch.Tensor
-        :param y_true: True image tensor.
-        :type y_true: torch.Tensor
-        :param psf: Point spread function tensor (not used in this loss).
-        :type psf: torch.Tensor
+        :param input: Input image tensor (not used in this loss).
+        :type input: torch.Tensor
+        :param output: Predicted image tensor.
+        :type output: torch.Tensor
+        :param target: True image tensor.
+        :type target: torch.Tensor
         :return: Computed Smooth L1 loss.
         :rtype: torch.Tensor
         """
-        return self._loss_func(y_pred, y_true)
+        return self._loss_func(output, target)
     
 
+@LOSS_REGISTRY.register("l1_plus_weighted_l2")
 class L1plusWeightedL2(nn.Module, Loss):
     """
     L1 Loss combined with Weighted Squared MSE Loss.
@@ -432,35 +390,32 @@ class L1plusWeightedL2(nn.Module, Loss):
     def __str__(self):
         return "L1 + Weighted L2 Loss"
 
-    @check_4tensor_inputs
     def forward(
             self,
-            x: torch.Tensor,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
-            psf: torch.Tensor
+            input: torch.Tensor,
+            output: torch.Tensor,
+            target: torch.Tensor
         ) -> torch.Tensor:
         """
         Forward pass for the combined L1 and Weighted Squared MSE loss function.
         
-        :param x: Input image tensor (not used in this loss).
-        :type x: torch.Tensor
-        :param y_pred: Predicted image tensor.
-        :type y_pred: torch.Tensor
-        :param y_true: True image tensor.
-        :type y_true: torch.Tensor
-        :param psf: Point spread function tensor.
-        :type psf: torch.Tensor
+        :param input: Input image tensor (not used in this loss).
+        :type input: torch.Tensor
+        :param output: Predicted image tensor.
+        :type output: torch.Tensor
+        :param target: True image tensor.
+        :type target: torch.Tensor
         :return: Computed combined loss.
         :rtype: torch.Tensor
         """
-        l1_loss = self.l1_loss(y_pred, y_true)
-        weighted_mse_loss = self.weighted_mse_loss(x, y_pred, y_true, psf)
+        l1_loss = self.l1_loss(output, target)
+        weighted_mse_loss = self.weighted_mse_loss(input, output, target)
         
         loss = self.alpha * l1_loss + self.beta * weighted_mse_loss
         return loss
     
 
+@LOSS_REGISTRY.register("l1_plus_weighted_l2_plus_frf")
 class L1plusWeightedL2plusFRF(nn.Module, Loss):
     """
     L1 Loss combined with Weighted Squared MSE Loss.
@@ -488,32 +443,29 @@ class L1plusWeightedL2plusFRF(nn.Module, Loss):
     def __str__(self):
         return "L1 + Weighted L2 + FRF Loss"
 
-    @check_4tensor_inputs
     def forward(
             self,
-            x: torch.Tensor,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
-            psf: torch.Tensor
+            input: torch.Tensor,
+            output: torch.Tensor,
+            target: torch.Tensor
         ) -> torch.Tensor:
         """
         Forward pass for the combined L1, Weighted Squared L2 and FRF
         loss function.
         
-        :param x: Input image tensor (not used in this loss).
-        :type x: torch.Tensor
-        :param y_pred: Predicted image tensor.
-        :type y_pred: torch.Tensor
-        :param y_true: True image tensor.
-        :type y_true: torch.Tensor
-        :param psf: Point spread function tensor.
-        :type psf: torch.Tensor
+        :param input: Input image tensor (not used in this loss).
+        :type input: torch.Tensor
+        :param output: Predicted image tensor.
+        :type output: torch.Tensor
+        :param target: True image tensor.
+        :type target: torch.Tensor
         :return: Computed combined loss.
         :rtype: torch.Tensor
         """
-        l1_loss = self.l1_loss(y_pred, y_true)
-        weighted_mse_loss = self._weighted_l2(y_pred, y_true, psf)
-        frf = self._flux_residual_fraction(y_pred, y_true)
+        psf = input - target
+        l1_loss = self.l1_loss(output, target)
+        weighted_mse_loss = self._weighted_l2(output, target, psf)
+        frf = self._flux_residual_fraction(output, target)
 
         loss = self.alpha * l1_loss + self.beta * weighted_mse_loss + self.gamma * frf
         return loss
@@ -544,8 +496,8 @@ class L1plusWeightedL2plusFRF(nn.Module, Loss):
     
     def _weighted_l2(
             self,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
+            output: torch.Tensor,
+            target: torch.Tensor,
             psf: torch.Tensor
         ) -> torch.Tensor:
         """
@@ -555,12 +507,10 @@ class L1plusWeightedL2plusFRF(nn.Module, Loss):
             where :math:`w_i = \frac{PSF_i^2}{max(PSF^2) + \epsilon}` and :math:`\epsilon`
             is a small constant to avoid division by zero.
 
-        :param y_pred: Predicted image tensor.
-        :type y_pred: torch.Tensor
-        :param y_true: True image tensor.
-        :type y_true: torch.Tensor
-        :param psf: Point spread function tensor.
-        :type psf: torch.Tensor
+        :param output: Predicted image tensor.
+        :type output: torch.Tensor
+        :param target: True image tensor.
+        :type target: torch.Tensor
         :return: Computed weighted squared MSE loss.
         :rtype: torch.Tensor
         """
@@ -580,7 +530,7 @@ class L1plusWeightedL2plusFRF(nn.Module, Loss):
         weights = torch.clamp(weights, min=1e-6)
 
         # Compute the squared difference and apply weights
-        squared_diff = (y_pred - y_true) ** 2
+        squared_diff = (output - target) ** 2
         weighted_squared_diff = squared_diff * weights
 
         # Reduce to mean

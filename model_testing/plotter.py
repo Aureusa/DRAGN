@@ -9,7 +9,7 @@ from astropy.visualization import ImageNormalize, PercentileInterval, AsinhStret
 
 from model_testing.performance_analysis import PAdict
 from model_testing.metrics import get_metrics
-from loggers_utils import log_execution
+from utils.log_utils import log_execution
 from utils import print_box
 from utils.validation import validate_numpy_array, validate_list
 from mpl_toolkits.mplot3d import Axes3D

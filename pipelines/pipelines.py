@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from model_testing import PAdict, ResultInterpreter, Plotter, Tester
 from loggers_utils import TrainingLogger
-from data_pipeline import _BaseDataset, _BaseTransform, _BaseLoader
+from data import _BaseDataset, _BaseTransform, _BaseLoader
 from utils import load_pkl_file, print_box
 
 def plot_loss_pipeline(data_folder: str, filename: str, discriminator: bool = False, from_epoch: int = 0, to_epoch: int = -1) -> None:
@@ -227,7 +227,7 @@ def mockreal_image_cleaner_pipeline(
         transform=transforms,
         loader=loaders,
     )
-    from data_pipeline.galaxy_dataset import MockRealGalaxyDataset
+    from data.galaxy_dataset import MockRealGalaxyDataset
     fits_files = glob.glob(f"{real_images_path}/*.fits", recursive=True)
     print_box(f"Found {len(fits_files)} .fits files in {real_images_path}")
 
@@ -286,7 +286,7 @@ def plot_pixel_hist(
         test_data_path_pkl: str|None = "/home4/s4683099/Deep-AGN-Clean/data/jwst_full_data/test_data.pkl",
         plots_filename: str = "plot_dist_hist",
     ) -> None:
-    from data_pipeline.galaxy_container import GalaxyContainer
+    from data.galaxy_container import GalaxyContainer
     import torch
 
     # Get the list of .fits files in the specified directory

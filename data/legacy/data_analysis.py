@@ -11,8 +11,8 @@ import numpy as np
 from astropy.visualization import AsinhStretch, ImageNormalize
 from astropy.io import fits
 
-from data_pipeline._telescopes_db import TELESCOPES_DB
-from loggers_utils import log_execution
+from data.legacy._telescopes_db import TELESCOPES_DB
+from utils.log_utils import log_execution
 from utils import print_box
 import random
 

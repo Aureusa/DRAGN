@@ -1,10 +1,10 @@
 import os
 import glob
 
-from data_pipeline import GalaxyDataset, FitsLoader
-from data_pipeline.galaxy_container import GalaxyContainer
+from data import GalaxyDataset, GalaxyDatasetPSFCond, FitsLoader
+from data.galaxy_container import GalaxyContainer
 from model_training import Trainer
-from networks.models import AVALAIBLE_MODELS
+from networks.models import AVAILABLE_MODELS
 from utils import load_pkl_file
 
 def training_pipeline(
@@ -19,12 +19,19 @@ def training_pipeline(
         num_epochs,
         mockdata_filepath: str = os.path.join("testing_folder", "jwst_data"),
         condition_on_f_agn: bool = False,
+        condition_on_psf: bool = False,
+        training_GAN: bool = False,
         **model_kwargs
     ) -> None:
-    # If condition_on_f_agn is True, ensure the model supports it by
-    # adding `in_channels=2` to the model_kwargs
-    if condition_on_f_agn and model_type in AVALAIBLE_MODELS:
+    # If condition_on_f_agn is True or condition_on_psf is True, 
+    # ensure the model supports it by adding `in_channels=2` to the model_kwargs
+    if condition_on_f_agn or condition_on_psf and model_type in AVAILABLE_MODELS:
         model_kwargs['in_channels'] = 2
+
+    if condition_on_psf:
+        dataset = GalaxyDatasetPSFCond
+    else:
+        dataset = GalaxyDataset
 
     # Load training and validation data
     X_train, y_train = load_pkl_file(
@@ -35,18 +42,22 @@ def training_pipeline(
     )
 
     # Creating the datasets
-    train_set = GalaxyDataset(
-        X_train,
-        y_train,
-        training=True,
-        condition_on_f_agn=condition_on_f_agn
-    )
-    val_set = GalaxyDataset(
-        X_val,
-        y_val,
-        training=True,
-        condition_on_f_agn=condition_on_f_agn
-    )
+    if condition_on_psf:
+        train_set = dataset(X_train, y_train, training=True)
+        val_set = dataset(X_val, y_val, training=True)
+    else:
+        train_set = dataset(
+            X_train,
+            y_train,
+            training=True,
+            condition_on_f_agn=condition_on_f_agn
+        )
+        val_set = dataset(
+            X_val,
+            y_val,
+            training=True,
+            condition_on_f_agn=condition_on_f_agn
+        )
 
     # Creating the data loaders
     train_loader = FitsLoader(
@@ -81,7 +92,13 @@ def training_pipeline(
 
     # Load real data
     real_data = glob.glob("/scratch/s4683099/real_JWST/COSMOS-Web_cutouts_Zhuang2024/*.fits", recursive=True)
-    real_container = GalaxyContainer(real_data[:16]) # Use only 16 samples for testing
+
+    # Use only 16 samples for testing
+    real_container = GalaxyContainer(
+        real_data[:16],
+        condition_on_f_agn=condition_on_f_agn,
+        condition_on_psf=condition_on_psf
+    )
 
     trainer = Trainer(
         model_type=model_type,
@@ -96,5 +113,6 @@ def training_pipeline(
         loss_name=loss,
         lr=lr,
         num_epochs=num_epochs,
-        real_container=real_container
+        real_container=real_container,
+        training_GAN=training_GAN
     )

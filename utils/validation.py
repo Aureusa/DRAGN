@@ -67,6 +67,7 @@ def validate_filename_pattern(filename, pattern):
 ########################################
 
 
+# DEPRECATED (LEGACY)
 def check_4tensor_inputs(func):
     def wrapper(self, x, y_pred, y_true, psf, *args, **kwargs):
         for t, name in zip([x, y_pred, y_true, psf], ['x', 'y_pred', 'y_true', 'psf']):
