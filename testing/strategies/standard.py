@@ -1,20 +1,23 @@
-from typing import Dict, Any, Tuple
 from pathlib import Path
+from typing import Any, Dict
+
 import torch
 
 from core.registry import TESTING_STRATEGY_REGISTRY
 from data.transforms import _BaseTransform
-from .base_strategy import TestingStrategy
 from networks.models import BaseModel
-from ..metrics import Metric
 from utils.persistence import save_pkl_file
+
+from .base_strategy import TestingStrategy
+from ..metrics import Metric
 
 
 @TESTING_STRATEGY_REGISTRY.register("standard")
 class StandardTestingStrategy(TestingStrategy):
     """Standard testing strategy for UNet and similar models"""
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config, **kwargs):
         self.save_results = kwargs.get('save_results', True)
+        del config
 
     def test_step(
             self,

@@ -4,13 +4,14 @@ import numpy as np
 from tqdm import tqdm
 
 from config import ExperimentConfig
-from core.registry import TRAINING_STRATEGY_REGISTRY, LOSS_REGISTRY
-from .checkpoint_manager import CheckpointManager
-from .training_logger import TrainingLogger
+from core.registry import LOSS_REGISTRY, TRAINING_STRATEGY_REGISTRY
 from utils import print_box
-from utils.building import build_model, build_loaders, build_transform
+from utils.building import build_loaders, build_model, build_transform
 from utils.device import get_device, move_batch_to_device
 from utils.log_utils import log_execution
+
+from .checkpoint_manager import CheckpointManager
+from .training_logger import TrainingLogger
 
 
 class UniversalTrainer:

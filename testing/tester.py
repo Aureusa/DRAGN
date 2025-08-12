@@ -3,15 +3,13 @@ from typing import List
 from tqdm import tqdm
 
 from config.test_configs import TestExperimentConfig
-from core.registry import (
-    TESTING_STRATEGY_REGISTRY,
-    METRICS_REGISTRY,
-)
-from .strategies.base_strategy import TestingStrategy
-from .metrics import Metric
-from utils.device import get_device, move_batch_to_device
-from utils.building import build_model, build_loaders, build_transform
+from core.registry import METRICS_REGISTRY, TESTING_STRATEGY_REGISTRY
 from utils import print_box
+from utils.building import build_loaders, build_model, build_transform
+from utils.device import get_device, move_batch_to_device
+
+from .metrics import Metric
+from .strategies.base_strategy import TestingStrategy
 
 
 class UniversalTester:
@@ -36,7 +34,7 @@ class UniversalTester:
         self.metrics = self._build_metrics(config.metrics_config)
         self.testing_strategy: TestingStrategy = TESTING_STRATEGY_REGISTRY.build(
             self.testing_strategy_type,
-            config.testing_config.testing_strategy_params
+            config
         )
 
         # Load model

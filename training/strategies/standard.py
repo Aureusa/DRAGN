@@ -1,5 +1,5 @@
-from typing import Dict, Any, Tuple
 import torch
+from typing import Any, Dict, Tuple
 
 from core.registry import TRAINING_STRATEGY_REGISTRY
 from .base_strategy import TrainingStrategy

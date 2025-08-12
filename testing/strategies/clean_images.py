@@ -1,18 +1,32 @@
-from typing import Dict, Any, Tuple
+import os
+from typing import Any, Dict
+
 import torch
 
+from config.test_configs import TestExperimentConfig
 from core.registry import TESTING_STRATEGY_REGISTRY
 from data.transforms import _BaseTransform
-from .base_strategy import TestingStrategy
 from networks.models import BaseModel
+from utils.plotting import Plotter
+
+from .base_strategy import TestingStrategy
 from ..metrics import Metric
 
 
 @TESTING_STRATEGY_REGISTRY.register("clean_images_standard")
 class CleanImagesStandardStrategy(TestingStrategy):
     """Standard testing strategy for UNet and similar models"""
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config: TestExperimentConfig, **kwargs):
+        # Create a directory to store the cleaned images
+        self.test_dir = os.path.join(config.experiment_dir, "clean_images_standard")
+        os.makedirs(self.test_dir, exist_ok=True)
+
+        # Initialize other parameters
         self.num_images = kwargs.get('num_images', 10)
+        self.f_agn = kwargs.get('f_agn', None)
+        self.desired_pattern = kwargs.get('desired_pattern', None)
+        self.model_name = kwargs.get('model_name', 'Model')
+        self.image_filename = kwargs.get('image_filename', 'image')
         self.cleaned_already = 0
 
     def test_step(
@@ -61,8 +75,24 @@ class CleanImagesStandardStrategy(TestingStrategy):
         inputs_list, outputs_list, targets_list = zip(*all_results)
         
         # Aggregate all tensors
-        aggregated_inputs = torch.cat(inputs_list, dim=0)
-        aggregated_outputs = torch.cat(outputs_list, dim=0)
-        aggregated_targets = torch.cat(targets_list, dim=0)
+        aggregated_inputs = torch.cat(inputs_list, dim=0) # (B, C, H, W)
+        aggregated_outputs = torch.cat(outputs_list, dim=0).unsqueeze(0) # (1, B, C, H, W)
+        aggregated_targets = torch.cat(targets_list, dim=0) # (B, C, H, W)
 
-        # TODO: CONTINUE WITH PLOTTING....
+        # Convert to np.ndarray
+        aggregated_inputs = aggregated_inputs.cpu().numpy()
+        aggregated_outputs = aggregated_outputs.cpu().numpy()
+        aggregated_targets = aggregated_targets.cpu().numpy()
+
+        # Make the plots
+        plotter = Plotter()
+        plotter.plot_grid(
+            aggregated_inputs,
+            aggregated_targets,
+            aggregated_outputs,
+            model_names=[self.model_name],
+            filename=self.image_filename,
+            data_folder=self.test_dir,
+            f_agn=self.f_agn,
+            desired_pattern=self.desired_pattern
+        )

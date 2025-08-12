@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple
+from typing import Any, Dict, Tuple
+
 import torch
 
 class TrainingStrategy(ABC):

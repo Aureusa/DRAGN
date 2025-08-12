@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from utils.log_utils import log_execution
 from utils import print_box
 from utils.device import get_device
-from utils.persistence import save_json_file, load_json_file
+from utils.log_utils import log_execution
+from utils.persistence import load_json_file, save_json_file
 from utils.validation import validate_type
 
 

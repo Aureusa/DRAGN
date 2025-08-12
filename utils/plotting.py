@@ -173,8 +173,7 @@ class Plotter:
         Columns: Input | Target | Output (per model)
         Rows: Each image in the batch.
         """
-        num_images, _, _, _ = sources.shape
-        num_models = outputs.shape[0] if len(outputs.shape) == 5 else 1
+        total_num_images, _, _, _ = sources.shape
 
         if f_agn is not None and desired_pattern is not None and targets is not None:
             f_agn_reordered, reorder_indices = self._reorder_to_known_pattern(f_agn, desired_pattern)
@@ -183,47 +182,91 @@ class Plotter:
             outputs = outputs[:,reorder_indices,:,:,:]
 
         # Use the len of the desired pattern for the rows (or 6 if not provided),
-        # Use the number of models for the columns + 1 for the input and 1 for the target if available
-        rows = len(desired_pattern) if desired_pattern is not None else 6
-        cols = 1 + num_models if targets is not None else 2 + num_models
+        max_imgs_per_fig = len(desired_pattern) if desired_pattern is not None else 6
 
-        num_figures = num_images // rows  # Number of figures needed
-        for fig_num in range(num_figures):
-            fig, axes = plt.subplots(rows, cols, figsize=(15, 15))
-            for i in range(rows):
-                for j in range(cols):
-                    ax = axes[i, j]
-                    if j == 0:
-                        # Input (B, C, H, W)
-                        self._put_image_on_ax(ax, sources[i, 0])
-                        if f_agn is not None: # Add f_AGN = 0.** text to the top left of the input
-                            ax.text(
-                                0.02, 0.08, f"f_AGN = 0.{f_agn_reordered[i]}",
-                                color="white", fontsize=12, fontweight="bold",
-                                ha="left", va="top", transform=ax.transAxes,
-                                bbox=dict(facecolor='black', alpha=0.5, boxstyle='round,pad=0.2')
-                            )
-                    elif j == 1:
-                        # Target (B, C, H, W)
-                        self._put_image_on_ax(ax, targets[i, 0])
-                    else:
-                        # Output (NUM_MODELS, B, C, H, W)
-                        self._put_image_on_ax(ax, outputs[j-1, i, 0])
+        # Calculate how many complete figures and remaining images
+        num_complete_figs = total_num_images // max_imgs_per_fig
+        remaining_images = total_num_images % max_imgs_per_fig
 
-            # Set column titles
-            if targets is not None:
-                col_titles = ["Input", "Target"] + list(model_names)
-            else:
-                col_titles = ["Input"] + list(model_names)
-            for j, title in enumerate(col_titles):
-                axes[0, j].set_title(title, fontsize=14, fontweight="bold")
+        # Create complete figures first
+        for fig_num in range(num_complete_figs):
+            start_idx = fig_num * max_imgs_per_fig
+            end_idx = start_idx + max_imgs_per_fig
 
-            plt.tight_layout()
-            if save:
-                self._save(fig, f"{filename}_fig_{fig_num}", data_folder)
-            else:
-                plt.show()
-            plt.close()
+            self._create_grid_figure(
+                sources[start_idx:end_idx],
+                targets[start_idx:end_idx] if targets is not None else None,
+                outputs[:, start_idx:end_idx, :, :, :],
+                f_agn=f_agn,
+                f_agn_reordered=f_agn_reordered,
+                model_names=model_names,
+                filename=f"{filename}_{fig_num}",
+                data_folder=data_folder,
+                save=save
+            )
+
+        # Create final figure with remaining images if any
+        if remaining_images > 0:
+            start_idx = num_complete_figs * max_imgs_per_fig
+
+            self._create_grid_figure(
+                sources[start_idx:],
+                targets[start_idx:] if targets is not None else None,
+                outputs[:, start_idx:, :, :, :],
+                f_agn=f_agn,
+                f_agn_reordered=f_agn_reordered,
+                model_names=model_names,
+                filename=f"{filename}_{num_complete_figs}",
+                data_folder=data_folder,
+                save=save
+            )
+
+    def _create_grid_figure(self, sources: np.ndarray, targets: np.ndarray|None, outputs: np.ndarray, f_agn: list[float]|None, f_agn_reordered: list[float]|None, model_names: list[str], filename: str, data_folder: str, save: bool = False) -> None:
+        """
+        Create a grid figure for the sources, targets, and outputs.
+        """
+        num_images, _, _, _ = sources.shape
+        num_models = outputs.shape[0] if len(outputs.shape) == 5 else 1
+
+        # Use the number of images for the rows;
+        # Use the number of models for the columns + 1 or 2 depending on if targets are available
+        rows = num_images
+        cols = 1 + num_models if targets is not None else 1
+
+        fig, axes = plt.subplots(rows, cols, figsize=(15, 15))
+        for i in range(rows):
+            for j in range(cols):
+                ax = axes[i, j]
+                if j == 0:
+                    # Input (B, C, H, W)
+                    self._put_image_on_ax(ax, sources[i, 0])
+                    if f_agn is not None: # Add f_AGN = 0.** text to the top left of the input
+                        ax.text(
+                            0.02, 0.08, f"f_AGN = 0.{f_agn_reordered[i]}",
+                            color="white", fontsize=12, fontweight="bold",
+                            ha="left", va="top", transform=ax.transAxes,
+                            bbox=dict(facecolor='black', alpha=0.5, boxstyle='round,pad=0.2')
+                        )
+                elif j == 1 and targets is not None:
+                    # Target (B, C, H, W)
+                    self._put_image_on_ax(ax, targets[i, 0])
+                else:
+                    # Output (NUM_MODELS, B, C, H, W)
+                    self._put_image_on_ax(ax, outputs[j-1 if targets is not None else j-2, i, 0])
+
+        # Set column titles
+        if targets is not None:
+            col_titles = ["Input", "Target"] + list(model_names)
+        else:
+            col_titles = ["Input"] + list(model_names)
+        for j, title in enumerate(col_titles):
+            axes[0, j].set_title(title, fontsize=14, fontweight="bold")
+
+        plt.tight_layout()
+        if save:
+            self._save(fig, filename, data_folder)
+        else:
+            plt.show()
 
     def plot_diagnostic(
             self,

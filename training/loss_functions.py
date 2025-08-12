@@ -1,11 +1,12 @@
+from abc import abstractmethod
+from typing import Any
+
 import torch
 import torch.nn as nn
-from typing import Any
-from abc import abstractmethod
 import torch.nn.functional as F
 
-from core.registry import LOSS_REGISTRY
 from core.component import Component
+from core.registry import LOSS_REGISTRY
 from utils.warnings import DRAGNWarning
 
     

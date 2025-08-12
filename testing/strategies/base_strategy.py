@@ -1,18 +1,23 @@
-from abc import ABC, abstractmethod
-import numpy as np
+from abc import abstractmethod
 from pathlib import Path
-import torch
-from typing import Dict, Any
+from typing import Any, Dict
 
+import numpy as np
+import torch
+
+from config.test_configs import TestExperimentConfig
+from core.component import Component
 from data.transforms import _BaseTransform
 from networks.models import BaseModel
-from ..metrics import Metric
 from utils import print_box
+from ..metrics import Metric
 
-class TestingStrategy(ABC):
+
+class TestingStrategy(Component):
     """Base class for different testing strategies"""
     @abstractmethod
-    def __init__(self, *args, **kwargs):
+    def __init__(self, configs: TestExperimentConfig, **kwargs):
+        self.configs = configs
         pass
     
     @abstractmethod
@@ -24,6 +29,11 @@ class TestingStrategy(ABC):
             metrics: Metric
         ) -> Dict[str, Any]:
         """Single test step - this is your core method"""
+
+    @classmethod
+    def from_config(cls, config: TestExperimentConfig, **kwargs) -> "TestingStrategy":
+        """Factory method to create a TestingStrategy from a config object"""
+        return cls(config, **config.testing_config.testing_strategy_params)
 
     def aggregate_results(self, all_results: list[Dict[str, Any]]) -> Dict[str, Any]:
         """Aggregate results across all test steps"""

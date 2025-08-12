@@ -1,4 +1,4 @@
 import data
 from networks import models
-from .strategies import strategies
+from .strategies import standard
 import training.loss_functions

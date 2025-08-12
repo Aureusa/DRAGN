@@ -1,15 +1,16 @@
-import torch
 import json
 import random
-import numpy as np
-from pathlib import Path
-from typing import Dict, Any, List, Union, Optional, Tuple
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import torch
 
 from networks.models import BaseModel
-from utils.log_utils import log_execution
-from utils.persistence import save_json_file, load_json_file
 from utils import print_box
+from utils.log_utils import log_execution
+from utils.persistence import load_json_file, save_json_file
 
 
 class CheckpointManager:
