@@ -15,6 +15,7 @@ class TestingConfig(ConfigBase):
     model_filename: str = Field(..., description="Filename of the model to be tested (without .pth extension)")
     data_folder: str = Field(..., description="The folder where the model and its data is stored")
     testing_strategy: str = Field(..., description="The strategy to use for testing")
+    testing_strategy_params: Optional[Dict[str, Any]] = Field({}, description="Additional parameters for the testing strategy")
     verbose: bool = Field(False, description="Whether to print verbose output")
 
 

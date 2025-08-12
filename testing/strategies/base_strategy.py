@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from pathlib import Path
 import torch
 from typing import Dict, Any
 
@@ -10,8 +11,9 @@ from utils import print_box
 
 class TestingStrategy(ABC):
     """Base class for different testing strategies"""
+    @abstractmethod
     def __init__(self, *args, **kwargs):
-        del kwargs, args
+        pass
     
     @abstractmethod
     def test_step(
@@ -33,7 +35,7 @@ class TestingStrategy(ABC):
                 aggregated[key].extend(value)
         return aggregated
 
-    def finalize_test(self, aggregated_results: Dict[str, Any], verbose: bool) -> Dict[str, Any]:
+    def finalize_test(self, aggregated_results: Dict[str, Any], experiment_dir: str|Path, verbose: bool) -> Dict[str, Any]:
         """Final processing/reporting step"""
         if verbose:
             info = "Final results:"

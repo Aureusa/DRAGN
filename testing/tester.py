@@ -1,25 +1,17 @@
-import os
-from copy import deepcopy
-import numpy as np
-from tqdm import tqdm
-import torch
-from pathlib import Path
-from typing import Union, List, Tuple, Dict, Any
+from typing import List
 
-from core.registry import (
-    MODEL_REGISTRY,
-    DATASET_REGISTRY,
-    LOADERS_REGISTRY,
-    TRANSFORM_REGISTRY,
-    TESTING_STRATEGY_REGISTRY,
-    METRICS_REGISTRY
-)
+from tqdm import tqdm
+
 from config.test_configs import TestExperimentConfig
+from core.registry import (
+    TESTING_STRATEGY_REGISTRY,
+    METRICS_REGISTRY,
+)
 from .strategies.base_strategy import TestingStrategy
 from .metrics import Metric
 from utils.device import get_device, move_batch_to_device
 from utils.building import build_model, build_loaders, build_transform
-from utils import print_box, save_pkl_file
+from utils import print_box
 
 
 class UniversalTester:
@@ -42,7 +34,10 @@ class UniversalTester:
         self.transform = build_transform(config.transform_config) if config.transform_config else None
         self.train_loader = build_loaders(config.test_data_config, self.transform)
         self.metrics = self._build_metrics(config.metrics_config)
-        self.testing_strategy: TestingStrategy = TESTING_STRATEGY_REGISTRY.build(self.testing_strategy_type, {})
+        self.testing_strategy: TestingStrategy = TESTING_STRATEGY_REGISTRY.build(
+            self.testing_strategy_type,
+            config.testing_config.testing_strategy_params
+        )
 
         # Load model
         self.model.load_checkpoint(config.testing_config.model_filename, self.experiment_dir)
@@ -85,7 +80,9 @@ class UniversalTester:
             )
             results.append(res)
         aggregated_results = self.testing_strategy.aggregate_results(results)
-        final_results = self.testing_strategy.finalize_test(aggregated_results, verbose=self.config.testing_config.verbose)
-
-        # Save results
-        save_pkl_file(final_results, self.config.experiment_dir / f"{self.testing_strategy_type}_test_results.pkl")
+        final_results = self.testing_strategy.finalize_test(
+            aggregated_results,
+            experiment_dir=self.experiment_dir,
+            verbose=self.config.testing_config.verbose
+        )
+        return final_results

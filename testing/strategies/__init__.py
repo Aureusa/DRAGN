@@ -1,4 +1,5 @@
 from .base_strategy import TestingStrategy
-from .strategies import StandardTestingStrategy
+from .standard import StandardTestingStrategy
+from .clean_images import CleanImagesStandardStrategy
 
-__all__ = ['TestingStrategy', 'StandardTestingStrategy']
+__all__ = ['TestingStrategy', 'StandardTestingStrategy', 'CleanImagesStandardStrategy']
