@@ -10,6 +10,7 @@ from core.component import Component
 from data.transforms import _BaseTransform
 from networks.models import BaseModel
 from utils import print_box
+from utils.validation import validate_type
 from ..metrics import Metric
 
 
@@ -29,6 +30,12 @@ class TestingStrategy(Component):
             metrics: Metric
         ) -> Dict[str, Any]:
         """Single test step - this is your core method"""
+        pass
+
+    @abstractmethod
+    def should_stop(self) -> bool:
+        """Check if the testing strategy has completed its work"""
+        pass
 
     @classmethod
     def from_config(cls, config: TestExperimentConfig, **kwargs) -> "TestingStrategy":

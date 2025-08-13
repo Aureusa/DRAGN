@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 import torch
@@ -28,6 +29,9 @@ class CleanImagesStandardStrategy(TestingStrategy):
         self.model_name = kwargs.get('model_name', 'Model')
         self.image_filename = kwargs.get('image_filename', 'image')
         self.cleaned_already = 0
+
+    def should_stop(self):
+        return self.cleaned_already == self.num_images
 
     def test_step(
             self,
@@ -84,15 +88,23 @@ class CleanImagesStandardStrategy(TestingStrategy):
         aggregated_outputs = aggregated_outputs.cpu().numpy()
         aggregated_targets = aggregated_targets.cpu().numpy()
 
-        # Make the plots
-        plotter = Plotter()
+        return {
+            "aggregated_inputs": aggregated_inputs,
+            "aggregated_outputs": aggregated_outputs,
+            "aggregated_targets": aggregated_targets
+        }
+
+    def finalize_test(self, aggregated_results: Dict[str, Any], experiment_dir: str|Path, verbose: bool) -> Dict[str, Any]:
+        """Final processing/reporting step"""
+        plotter = Plotter(verbose=verbose)
         plotter.plot_grid(
-            aggregated_inputs,
-            aggregated_targets,
-            aggregated_outputs,
+            aggregated_results["aggregated_inputs"],
+            aggregated_results["aggregated_targets"],
+            aggregated_results["aggregated_outputs"],
             model_names=[self.model_name],
             filename=self.image_filename,
             data_folder=self.test_dir,
             f_agn=self.f_agn,
-            desired_pattern=self.desired_pattern
+            desired_pattern=self.desired_pattern,
+            save=True
         )

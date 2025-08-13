@@ -71,9 +71,10 @@ def plot_image(self, img: np.ndarray, filename: str = "image_plot", data_folder:
 
 
 class Plotter:
-    def __init__(self, interval: BaseInterval = PercentileInterval(99.5), stretch: BaseStretch = AsinhStretch()):
+    def __init__(self, interval: BaseInterval = PercentileInterval(99.5), stretch: BaseStretch = AsinhStretch(), verbose: bool = False):
         self.interval = interval
         self.stretch = stretch
+        self.verbose = verbose
 
     def _put_image_on_ax(self, ax: plt.Axes, img: np.ndarray, norm: Any|ImageNormalize = "standard", colorbar: bool = False, cmap: str = 'gray') -> None:
         im = ax.imshow(
@@ -97,7 +98,8 @@ class Plotter:
         if not os.path.exists(filepath):
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
         fig.savefig(filepath, bbox_inches='tight', dpi=200)
-        print_box(f"Plot saved successfully as '{filepath}'!")
+        if self.verbose:
+            print_box(f"Plot saved successfully as '{filepath}'!")
 
     def _reorder_to_known_pattern(self, f_agn, desired_pattern):
         """
@@ -180,6 +182,8 @@ class Plotter:
             sources = sources[reorder_indices,:,:,:]
             targets = targets[reorder_indices,:,:,:]
             outputs = outputs[:,reorder_indices,:,:,:]
+        else:
+            f_agn_reordered = None
 
         # Use the len of the desired pattern for the rows (or 6 if not provided),
         max_imgs_per_fig = len(desired_pattern) if desired_pattern is not None else 6
@@ -231,9 +235,9 @@ class Plotter:
         # Use the number of images for the rows;
         # Use the number of models for the columns + 1 or 2 depending on if targets are available
         rows = num_images
-        cols = 1 + num_models if targets is not None else 1
+        cols = 2 + num_models if targets is not None else 1 + num_models
 
-        fig, axes = plt.subplots(rows, cols, figsize=(15, 15))
+        fig, axes = plt.subplots(rows, cols, figsize=(3*cols, 3*rows))
         for i in range(rows):
             for j in range(cols):
                 ax = axes[i, j]
@@ -252,7 +256,7 @@ class Plotter:
                     self._put_image_on_ax(ax, targets[i, 0])
                 else:
                     # Output (NUM_MODELS, B, C, H, W)
-                    self._put_image_on_ax(ax, outputs[j-1 if targets is not None else j-2, i, 0])
+                    self._put_image_on_ax(ax, outputs[j-2 if targets is not None else j-1, i, 0])
 
         # Set column titles
         if targets is not None:
@@ -262,7 +266,7 @@ class Plotter:
         for j, title in enumerate(col_titles):
             axes[0, j].set_title(title, fontsize=14, fontweight="bold")
 
-        plt.tight_layout()
+        fig.tight_layout()
         if save:
             self._save(fig, filename, data_folder)
         else:
@@ -394,9 +398,9 @@ class Plotter:
             if show_real_min_infered:
                 self._put_image_on_ax(tar_min_out_ax, targets[row] - outputs[row], cmap="magma", colorbar=True, norm=None)
 
-            plt.tight_layout()
-            if save:
-                self._save(fig, f"{filename}_{fig_num}", data_folder)
-            else:
-                plt.show()
-            plt.close()
+        plt.tight_layout()
+        if save:
+            self._save(fig, f"{filename}_{fig_num}", data_folder)
+        else:
+            plt.show()
+        plt.close()

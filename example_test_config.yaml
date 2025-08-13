@@ -9,7 +9,7 @@ testing_config:
   data_folder: "/home4/s4683099/DRAGN/experiments/test1"
 
   # The strategy to use for testing
-  testing_strategy: "standard"
+  testing_strategy: "clean_images_standard"
 
   # Whether to print verbose output
   verbose: true

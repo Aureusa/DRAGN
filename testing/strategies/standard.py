@@ -19,6 +19,9 @@ class StandardTestingStrategy(TestingStrategy):
         self.save_results = kwargs.get('save_results', True)
         del config
 
+    def should_stop(self):
+        return False
+
     def test_step(
             self,
             model: BaseModel,

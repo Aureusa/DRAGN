@@ -77,6 +77,9 @@ class UniversalTester:
                 metrics=self.metrics
             )
             results.append(res)
+
+            if self.testing_strategy.should_stop():
+                break
         aggregated_results = self.testing_strategy.aggregate_results(results)
         final_results = self.testing_strategy.finalize_test(
             aggregated_results,
