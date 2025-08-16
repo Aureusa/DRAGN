@@ -23,3 +23,8 @@ class TransformConfig(ConfigBase):
 class ModelConfig(ConfigBase):
     architecture: str = Field(..., description="Model architecture type")
     params: Optional[Dict[str, Any]] = Field({}, description="Model parameters")
+
+
+class MetricsConfig(ConfigBase):
+    metrics: List[str] = Field(..., description="List of metrics to evaluate")
+    params: Optional[Dict[str, Any]] = Field({}, description="Additional parameters for metrics")

@@ -1,2 +1,3 @@
 from .train_configs import ExperimentConfig
 from .test_configs import TestExperimentConfig
+from .multi_model_test_configs import MultiModelTestExperimentConfig

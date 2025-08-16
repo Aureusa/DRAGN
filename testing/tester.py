@@ -5,7 +5,7 @@ from tqdm import tqdm
 from config.test_configs import TestExperimentConfig
 from core.registry import METRICS_REGISTRY, TESTING_STRATEGY_REGISTRY
 from utils import print_box
-from utils.building import build_loaders, build_model, build_transform
+from utils.building import build_loaders, build_model, build_transform, build_metrics
 from utils.device import get_device, move_batch_to_device
 
 from .metrics import Metric
@@ -30,11 +30,12 @@ class UniversalTester:
         # Build components from config
         self.model = build_model(config.model_settings_config).to(self._device)
         self.transform = build_transform(config.transform_config) if config.transform_config else None
-        self.train_loader = build_loaders(config.test_data_config, self.transform)
-        self.metrics = self._build_metrics(config.metrics_config)
+        self.test_loader = build_loaders(config.test_data_config, self.transform)
+        self.metrics = build_metrics(config.metrics_config) if config.metrics_config else []
         self.testing_strategy: TestingStrategy = TESTING_STRATEGY_REGISTRY.build(
             self.testing_strategy_type,
-            config
+            config,
+            **config.testing_config.testing_strategy_params
         )
 
         # Load model
@@ -47,16 +48,6 @@ class UniversalTester:
         info += f"Transforms: {config.transform_config.transforms if config.transform_config else 'None'}\n"
         info += f"Metrics: {', '.join(config.metrics_config.metrics)}\n"
         print_box(info)
-
-    def _build_metrics(self, config) -> List[Metric]:
-        """Build metrics"""
-        metrics = []
-        for metric_name in config.metrics:
-            metric_type = METRICS_REGISTRY.get(
-                metric_name,
-            )
-            metrics.append(metric_type(**config.params.get(metric_name, {})))
-        return metrics
     
     def test(self) -> dict:
         """
@@ -68,7 +59,7 @@ class UniversalTester:
         self.model.eval()  # Set model to evaluation mode
 
         results = []
-        for batch in tqdm(self.train_loader):
+        for batch in tqdm(self.test_loader):
             batch = move_batch_to_device(batch, self._device)
             res = self.testing_strategy.test_step(
                 model=self.model,
@@ -83,7 +74,6 @@ class UniversalTester:
         aggregated_results = self.testing_strategy.aggregate_results(results)
         final_results = self.testing_strategy.finalize_test(
             aggregated_results,
-            experiment_dir=self.experiment_dir,
             verbose=self.config.testing_config.verbose
         )
         return final_results

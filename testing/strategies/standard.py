@@ -5,6 +5,7 @@ import torch
 
 from core.registry import TESTING_STRATEGY_REGISTRY
 from data.transforms import _BaseTransform
+from config.test_configs import TestExperimentConfig
 from networks.models import BaseModel
 from utils.persistence import save_pkl_file
 
@@ -15,7 +16,8 @@ from ..metrics import Metric
 @TESTING_STRATEGY_REGISTRY.register("standard")
 class StandardTestingStrategy(TestingStrategy):
     """Standard testing strategy for UNet and similar models"""
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: TestExperimentConfig, **kwargs):
+        self.experiment_dir = config.experiment_dir
         self.save_results = kwargs.get('save_results', True)
         del config
 
@@ -66,9 +68,9 @@ class StandardTestingStrategy(TestingStrategy):
                 results[metric_name].extend(metric_value.cpu().numpy().tolist())
         return results
 
-    def finalize_test(self, aggregated_results: Dict[str, Any], experiment_dir: str|Path, verbose: bool) -> Dict[str, Any]:
-        final_results = super().finalize_test(aggregated_results, experiment_dir, verbose)
+    def finalize_test(self, aggregated_results: Dict[str, Any], verbose: bool) -> Dict[str, Any]:
+        final_results = super().finalize_test(aggregated_results, verbose)
         if self.save_results:
-            save_pkl_file(final_results, experiment_dir / "standard_test_results.pkl")
+            save_pkl_file(final_results, self.experiment_dir / "standard_test_results.pkl")
         return final_results
     

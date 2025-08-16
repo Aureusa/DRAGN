@@ -20,7 +20,6 @@ class CleanImagesStandardStrategy(TestingStrategy):
     def __init__(self, config: TestExperimentConfig, **kwargs):
         # Create a directory to store the cleaned images
         self.test_dir = os.path.join(config.experiment_dir, "clean_images_standard")
-        os.makedirs(self.test_dir, exist_ok=True)
 
         # Initialize other parameters
         self.num_images = kwargs.get('num_images', 10)
@@ -89,22 +88,28 @@ class CleanImagesStandardStrategy(TestingStrategy):
         aggregated_targets = aggregated_targets.cpu().numpy()
 
         return {
+            "models": [self.model_name],
             "aggregated_inputs": aggregated_inputs,
             "aggregated_outputs": aggregated_outputs,
             "aggregated_targets": aggregated_targets
         }
 
-    def finalize_test(self, aggregated_results: Dict[str, Any], experiment_dir: str|Path, verbose: bool) -> Dict[str, Any]:
+    def finalize_test(self, aggregated_results: Dict[str, Any], verbose: bool) -> Dict[str, Any]:
         """Final processing/reporting step"""
+        # Make sure the folder for the results exists
+        os.makedirs(self.test_dir, exist_ok=True)
+        
         plotter = Plotter(verbose=verbose)
         plotter.plot_grid(
             aggregated_results["aggregated_inputs"],
             aggregated_results["aggregated_targets"],
             aggregated_results["aggregated_outputs"],
-            model_names=[self.model_name],
+            model_names=aggregated_results["models"],
             filename=self.image_filename,
             data_folder=self.test_dir,
             f_agn=self.f_agn,
             desired_pattern=self.desired_pattern,
             save=True
         )
+        return aggregated_results
+    

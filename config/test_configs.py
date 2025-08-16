@@ -3,12 +3,7 @@ from typing import Dict, Any, Optional, List, Union
 from pathlib import Path
 
 from .base import ConfigBase
-from .common import ModelConfig, DataConfig, TransformConfig
-
-
-class MetricsConfig(ConfigBase):
-    metrics: List[str] = Field(..., description="List of metrics to evaluate")
-    params: Optional[Dict[str, Any]] = Field({}, description="Additional parameters for metrics")
+from .common import ModelConfig, DataConfig, TransformConfig, MetricsConfig
 
 
 class TestingConfig(ConfigBase):
@@ -24,8 +19,8 @@ class TestExperimentConfig(ConfigBase):
     model_settings_config: ModelConfig
     test_data_config: DataConfig
     transform_config: Optional[TransformConfig] = Field(None, description="Transform configuration")
-    metrics_config: MetricsConfig
-    
+    metrics_config: Optional[MetricsConfig] = Field(None, description="Metrics configuration")
+
     @property
     def experiment_dir(self) -> Path:
         return Path(self.testing_config.data_folder)

@@ -1,8 +1,11 @@
 from pathlib import Path
 
+from typing import List
+
+from testing.metrics import Metric
 from data.transforms import _BaseTransform
-from config.common import DataConfig, TransformConfig, ModelConfig
-from core.registry import MODEL_REGISTRY, DATASET_REGISTRY, LOADERS_REGISTRY, TRANSFORM_REGISTRY
+from config.common import DataConfig, TransformConfig, ModelConfig, MetricsConfig
+from core.registry import METRICS_REGISTRY, MODEL_REGISTRY, DATASET_REGISTRY, LOADERS_REGISTRY, TRANSFORM_REGISTRY
 from networks.models._base_model import BaseModel
 from utils.persistence import load_pkl_file
 
@@ -100,4 +103,13 @@ def build_transform(config: TransformConfig):
         return transform_class.from_config(params)
     else:
         raise ValueError(f"Invalid transform configuration, should be a string or a list of strings: {transforms}")
-    
+
+def build_metrics(config: MetricsConfig) -> List[Metric]:
+        """Build metrics"""
+        metrics = []
+        for metric_name in config.metrics:
+            metric_type = METRICS_REGISTRY.get(
+                metric_name,
+            )
+            metrics.append(metric_type(**config.params))
+        return metrics

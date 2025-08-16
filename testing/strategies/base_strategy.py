@@ -19,6 +19,7 @@ class TestingStrategy(Component):
     @abstractmethod
     def __init__(self, configs: TestExperimentConfig, **kwargs):
         self.configs = configs
+        self.experiment_dir = configs.experiment_dir
         pass
     
     @abstractmethod
@@ -40,7 +41,7 @@ class TestingStrategy(Component):
     @classmethod
     def from_config(cls, config: TestExperimentConfig, **kwargs) -> "TestingStrategy":
         """Factory method to create a TestingStrategy from a config object"""
-        return cls(config, **config.testing_config.testing_strategy_params)
+        return cls(config, **kwargs)
 
     def aggregate_results(self, all_results: list[Dict[str, Any]]) -> Dict[str, Any]:
         """Aggregate results across all test steps"""
@@ -52,7 +53,7 @@ class TestingStrategy(Component):
                 aggregated[key].extend(value)
         return aggregated
 
-    def finalize_test(self, aggregated_results: Dict[str, Any], experiment_dir: str|Path, verbose: bool) -> Dict[str, Any]:
+    def finalize_test(self, aggregated_results: Dict[str, Any], verbose: bool) -> Dict[str, Any]:
         """Final processing/reporting step"""
         if verbose:
             info = "Final results:"
