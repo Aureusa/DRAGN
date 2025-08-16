@@ -6,7 +6,7 @@ training_config:
   model_filename: "unet"
 
   # The folder to store data relevant to training
-  data_folder: "/home4/s4683099/DRAGN/experiments/test1"
+  data_folder: "/home4/s4683099/DRAGN/experiments/test2"
 
   # The strategy to use for training
   training_strategy: "standard"

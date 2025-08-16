@@ -4,6 +4,7 @@ from typing import List
 
 from testing.metrics import Metric
 from data.transforms import _BaseTransform
+from data.loaders import _BaseLoader
 from config.common import DataConfig, TransformConfig, ModelConfig, MetricsConfig
 from core.registry import METRICS_REGISTRY, MODEL_REGISTRY, DATASET_REGISTRY, LOADERS_REGISTRY, TRANSFORM_REGISTRY
 from networks.models._base_model import BaseModel
@@ -35,7 +36,7 @@ def build_model(config: ModelConfig) -> BaseModel:
 
     return model
 
-def build_loaders(config: DataConfig, transform: _BaseTransform | None = None):
+def build_loaders(config: DataConfig, transform: _BaseTransform | None = None) -> _BaseLoader:
     """
     Build the dataset based on the configuration as well as optionally
     passing a transform.
@@ -77,7 +78,7 @@ def build_loaders(config: DataConfig, transform: _BaseTransform | None = None):
     )
     return loader_obj
 
-def build_transform(config: TransformConfig):
+def build_transform(config: TransformConfig) -> _BaseTransform:
     """
     Build the transform based on the configuration.
 
