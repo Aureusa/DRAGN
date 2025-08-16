@@ -1,7 +1,7 @@
-from configs import ExperimentConfig
+from config import ExperimentConfig
 from training.trainer import UniversalTrainer
 
-def main(conf_filepath: str = "experiments/unet_experiment1/unet_experiment1.yaml"):
+def main(conf_filepath: str = "example_train_config.yaml"):
     # Load the experiment configuration
     config = ExperimentConfig.from_yaml(conf_filepath)
 

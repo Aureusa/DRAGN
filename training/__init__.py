@@ -1,4 +1,4 @@
-import data_pipeline
+import data
 from networks import models
-from model_training import loss_functions
-from .strategies import strategies
+from .strategies import standard
+from . import loss_functions

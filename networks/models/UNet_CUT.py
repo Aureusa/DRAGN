@@ -1,8 +1,11 @@
+"""
+NOTE: This module is DEPRICATED, should be removed (keep for DRAGN experiment)
+"""
 import torch
 from monai.networks.nets import BasicUNet
 
 from networks.models._base_model import BaseModel
-from data_pipeline.transforms import PerImageAsinhNormalize
+from data.transforms import PerImageAsinhNormalize
 
 
 def load_cut_generator_only(model_path, device='cuda:0'):

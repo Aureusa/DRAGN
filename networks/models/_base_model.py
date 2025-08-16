@@ -31,7 +31,6 @@ class BaseModel(nn.Module, Component):
         """
         pass
     
-    # Utility methods (concrete, not abstract)
     def save_checkpoint(self, filename: str, dir_: str):
         """
         Save the model to a file.

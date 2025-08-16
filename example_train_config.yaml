@@ -1,0 +1,94 @@
+# Example configuration for ExperimentConfig
+# Generated automatically - modify as needed
+
+training_config:
+  # Filename of the saved model (without .pth extension)
+  model_filename: "unet"
+
+  # The folder to store data relevant to training
+  data_folder: "/home4/s4683099/DRAGN/experiments/test2"
+
+  # The strategy to use for training
+  training_strategy: "standard"
+
+  # Number of training epochs
+  num_epochs: 50
+
+  # Log every N steps
+  log_every: 1
+
+  # Save model every N steps
+  save_every: 10
+
+  # Enable verbose logging for the training logger
+  training_logger_verbose: false
+
+  # Enable verbose logging for the checkpoint manager
+  checkpoint_manager_verbose: true
+
+
+model_settings_config:
+  # Model architecture type
+  architecture: "unet"
+
+train_data_config:
+  # Type of dataset
+  dataset_type: "galaxy_dataset"
+
+  # Type of data loader
+  loader_type: "fits_loader"
+
+  # Path to the dataset
+  data_path: "/home4/s4683099/DRAGN/testing_folder/jwst_data/train_data.pkl"
+
+  # Batch size
+  batch_size: 4
+
+  # Number of workers for data loading
+  num_workers: 0
+
+  # Additional dataset parameters
+  dataset_params: {}
+
+  # Additional data loader parameters
+  loaders_params: {}
+
+
+# Validation data configuration
+val_data_config:
+  # Type of dataset
+  dataset_type: "galaxy_dataset"
+
+  # Type of data loader
+  loader_type: "fits_loader"
+
+  # Path to the dataset
+  data_path: "/home4/s4683099/DRAGN/testing_folder/jwst_data/val_data.pkl"
+
+  # Batch size
+  batch_size: 4
+
+  # Number of workers for data loading
+  num_workers: 0
+
+  # Additional dataset parameters
+  dataset_params: {}
+
+  # Additional data loader parameters
+  loaders_params: {}
+
+
+loss_fn_config:
+  # Loss function type
+  loss: "l1_loss"
+
+
+optimizer_config:
+  # Optimizer type
+  name: "adam"
+
+  # Learning rate
+  lr: 0.001
+
+  # Weight decay
+  weight_decay: 0.0001

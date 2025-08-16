@@ -1,0 +1,49 @@
+# Example configuration for MultiModelTestExperimentConfig
+# Generated automatically - modify as needed
+
+multi_model_testing_config:
+  # The folder where to save the test results
+  data_folder: "/home4/s4683099/DRAGN/experiments/multimodel_testing"
+
+  # The strategy to use for testing
+  testing_strategy: "clean_images_multi_model"
+
+  # Additional parameters for the testing strategy
+  testing_strategy_params: {}
+
+  # Whether to print verbose output
+  verbose: true
+
+
+models_settings_config: {
+  unet_step_10: {
+    architecture: "unet",
+    full_filepath: "/home4/s4683099/DRAGN/experiments/test1/unet_step_10.pth"
+  },
+  unet_step_70: {
+    architecture: "unet",
+    full_filepath: "/home4/s4683099/DRAGN/experiments/test1/unet_step_70.pth"
+  }
+}
+
+data_config:
+  # Type of dataset
+  dataset_type: "galaxy_dataset"
+
+  # Type of data loader
+  loader_type: "fits_loader"
+
+  # Path to the dataset
+  data_path: "/home4/s4683099/DRAGN/testing_folder/jwst_data/test_data.pkl"
+
+  # Batch size
+  batch_size: 4
+
+  # Number of workers for data loading
+  num_workers: 0
+
+  # Additional dataset parameters
+  dataset_params: {}
+
+  # Additional data loader parameters
+  loaders_params: {}
