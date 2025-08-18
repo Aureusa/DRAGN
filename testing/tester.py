@@ -1,25 +1,23 @@
-from typing import List
+from typing import Any
 
 from tqdm import tqdm
 
 from config.test_configs import TestExperimentConfig
-from core.registry import METRICS_REGISTRY, TESTING_STRATEGY_REGISTRY
+from core.registry import TESTING_STRATEGY_REGISTRY
 from utils import print_box
 from utils.building import build_loaders, build_model, build_transform, build_metrics
 from utils.device import get_device, move_batch_to_device
 
-from .metrics import Metric
 from .strategies.base_strategy import TestingStrategy
 
 
 class UniversalTester:
     """Universal tester that uses configuration-driven testing strategies"""
-    
-    def __init__(self, config: TestExperimentConfig):
+    def __init__(self, config: TestExperimentConfig) -> None:
         """
         Initialize the UniversalTester
         
-        :param config: Configuration object for testing
+        :param config: Configuration object for testing setup
         :type config: TestExperimentConfig
         """
         self.config = config
@@ -49,12 +47,12 @@ class UniversalTester:
         info += f"Metrics: {', '.join(config.metrics_config.metrics)}\n"
         print_box(info)
     
-    def test(self) -> dict:
+    def test(self) -> Any:
         """
         Test the model using the configured strategy
         
-        :return: Dictionary of evaluation metrics
-        :rtype: dict
+        :return: The final results
+        :rtype: Any
         """
         self.model.eval()  # Set model to evaluation mode
 

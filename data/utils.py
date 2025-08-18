@@ -6,7 +6,7 @@ from utils.validation import validate_numpy_array
 def load_fits_data(filepath: str, max_val=False) -> np.ndarray:
     """
     Load a FITS file and return the data
-      as a numpy array.
+    as a numpy array.
 
     :param filepath: The path to the FITS file.
     :type filepath: str

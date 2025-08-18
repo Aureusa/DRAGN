@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
@@ -10,14 +9,24 @@ from core.component import Component
 from data.transforms import _BaseTransform
 from networks.models import BaseModel
 from utils import print_box
-from utils.validation import validate_type
 from ..metrics import Metric
 
 
 class TestingStrategy(Component):
-    """Base class for different testing strategies"""
+    """
+    Base class for different testing strategies.
+    Must implement test_step and should_stop methods.
+    """
     @abstractmethod
-    def __init__(self, configs: TestExperimentConfig, **kwargs):
+    def __init__(self, configs: TestExperimentConfig, **kwargs) -> None:
+        """
+        Initialize the testing strategy with configuration and other parameters.
+
+        :param configs: The configuration object for the testing strategy.
+        :type configs: TestExperimentConfig
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: Any
+        """
         self.configs = configs
         self.experiment_dir = configs.experiment_dir
         pass
@@ -40,11 +49,25 @@ class TestingStrategy(Component):
 
     @classmethod
     def from_config(cls, config: TestExperimentConfig, **kwargs) -> "TestingStrategy":
-        """Factory method to create a TestingStrategy from a config object"""
+        """
+        Factory method to create a TestingStrategy from a config object
+
+        :param config: The configuration object for the testing strategy.
+        :type config: TestExperimentConfig
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: Any
+        """
         return cls(config, **kwargs)
 
     def aggregate_results(self, all_results: list[Dict[str, Any]]) -> Dict[str, Any]:
-        """Aggregate results across all test steps"""
+        """
+        Aggregate results across all test steps
+
+        :param all_results: A list of dictionaries containing results from each test step.
+        :type all_results: list[Dict[str, Any]]
+        :return: A dictionary containing the aggregated results.
+        :rtype: Dict[str, Any]
+        """
         aggregated = {}
         for result in all_results:
             for key, value in result.items():
@@ -54,7 +77,16 @@ class TestingStrategy(Component):
         return aggregated
 
     def finalize_test(self, aggregated_results: Dict[str, Any], verbose: bool) -> Dict[str, Any]:
-        """Final processing/reporting step"""
+        """
+        Final processing/reporting step
+
+        :param aggregated_results: The aggregated results from all test steps.
+        :type aggregated_results: Dict[str, Any]
+        :param verbose: Whether to print detailed results.
+        :type verbose: bool
+        :return: The finalized results after processing.
+        :rtype: Dict[str, Any]
+        """
         if verbose:
             info = "Final results:"
             for key, values in aggregated_results.items():
@@ -62,8 +94,33 @@ class TestingStrategy(Component):
             print_box(info)
         return aggregated_results
 
-    def _apply_inverse_transforms(self, inputs, outputs, targets, transforms, input_norm_params, target_norm_params):
-        """Helper method to apply inverse transforms"""
+    def _apply_inverse_transforms(
+            self,
+            inputs: torch.Tensor,
+            outputs: torch.Tensor,
+            targets: torch.Tensor,
+            transforms: _BaseTransform,
+            input_norm_params: list[Dict[str, Any]],
+            target_norm_params: list[Dict[str, Any]]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Helper method to apply inverse transforms
+
+        :param inputs: The input tensors.
+        :type inputs: torch.Tensor
+        :param outputs: The output tensors.
+        :type outputs: torch.Tensor
+        :param targets: The target tensors.
+        :type targets: torch.Tensor
+        :param transforms: The transform object to apply inverse transforms.
+        :type transforms: _BaseTransform
+        :param input_norm_params: Normalization parameters for inputs.
+        :type input_norm_params: list[Dict[str, Any]]
+        :param target_norm_params: Normalization parameters for targets.
+        :type target_norm_params: list[Dict[str, Any]]
+        :return: The inverse transformed inputs, outputs, and targets.
+        :rtype: tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        """
         ins, outs, trgs = [], [], []
         
         for i in range(len(outputs)):

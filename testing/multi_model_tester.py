@@ -1,23 +1,27 @@
-from typing import List, Dict
+from typing import Dict, Any
 
 from tqdm import tqdm
 
 from data.loaders import _BaseLoader
 from config.multi_model_test_configs import MultiModelTestExperimentConfig, SingleModelConfig
 from config.common import DataConfig
-from core.registry import METRICS_REGISTRY, TESTING_STRATEGY_REGISTRY
+from core.registry import TESTING_STRATEGY_REGISTRY
 from utils import print_box
 from utils.building import build_loaders, build_model, build_transform, build_metrics
 from utils.device import get_device, move_batch_to_device
 
-from .metrics import Metric
 from .strategies.base_strategy import TestingStrategy
 
 
 class MultiModelTester:
     """Multi-model tester that uses configuration-driven testing strategies"""
-    
-    def __init__(self, config: MultiModelTestExperimentConfig):
+    def __init__(self, config: MultiModelTestExperimentConfig) -> None:
+        """
+        Initialize the MultiModelTester
+        
+        :param config: Configuration object for testing setup
+        :type config: MultiModelTestExperimentConfig
+        """
         self.config = config
 
         # Get the testing configs
@@ -58,8 +62,23 @@ class MultiModelTester:
                 info += f"Metrics: {', '.join([str(metric) for metric in self.metrics])}\n"
             print_box(info)
 
-    def _build_data_loaders_and_transforms(self, models_settings_config: Dict[str, SingleModelConfig], data_config: DataConfig) -> Dict[str, _BaseLoader]:
-        """Build data loaders and transforms for each model"""
+    def _build_data_loaders_and_transforms(
+            self,
+            models_settings_config: Dict[str, SingleModelConfig],
+            data_config: DataConfig
+        ) -> Dict[str, _BaseLoader]:
+        """
+        Build data loaders and transforms for each model
+
+        :param model_settings_config: Configuration for each model.
+        Should be a dict with the name of the models as keys and 
+        their configurations as values
+        :type model_settings_config: Dict[str, SingleModelConfig]
+        :param data_config: Configuration for the data
+        :type data_config: DataConfig
+        :return: A dictionary of data loaders for each model
+        :rtype: Dict[str, _BaseLoader]
+        """
         data_loaders = {}
         transforms = {}
         for model_name, model_config in models_settings_config.items():
@@ -69,7 +88,13 @@ class MultiModelTester:
             transforms[model_name] = transform
         return data_loaders, transforms
 
-    def test(self) -> dict:
+    def test(self) -> Any:
+        """
+        Test each model using the testing strategy
+        
+        :return: The final results
+        :rtype: Any
+        """
         result = {}
         for model_name in self.model_names:
             data_loader = self.test_loaders[model_name]

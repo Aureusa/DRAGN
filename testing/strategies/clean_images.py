@@ -16,8 +16,25 @@ from ..metrics import Metric
 
 @TESTING_STRATEGY_REGISTRY.register("clean_images_standard")
 class CleanImagesStandardStrategy(TestingStrategy):
-    """Standard testing strategy for UNet and similar models"""
+    """
+    Testing strategy for passing images through the model and saving the cleaned outputs.
+    It creates grid plot containing the input image (first column), target image if avaliable
+    (second column) and the model output (third column).
+    """
     def __init__(self, config: TestExperimentConfig, **kwargs):
+        """
+        Initialize the testing strategy with configuration and other parameters.
+
+        :param configs: The configuration object for the testing strategy.
+        :type configs: TestExperimentConfig
+        :param kwargs: Additional keyword arguments. Modular parameters are:
+            num_images - default 10
+            f_agn - None
+            desired_pattern - None
+            model_name - 'Model'
+            images_filename - 'image'
+        :type kwargs: Any
+        """
         # Create a directory to store the cleaned images
         self.test_dir = os.path.join(config.experiment_dir, "clean_images_standard")
 
@@ -26,10 +43,13 @@ class CleanImagesStandardStrategy(TestingStrategy):
         self.f_agn = kwargs.get('f_agn', None)
         self.desired_pattern = kwargs.get('desired_pattern', None)
         self.model_name = kwargs.get('model_name', 'Model')
-        self.image_filename = kwargs.get('image_filename', 'image')
+        self.images_filename = kwargs.get('images_filename', 'image')
         self.cleaned_already = 0
 
     def should_stop(self):
+        """
+        Stops when the desired number of images have been cleaned.
+        """
         return self.cleaned_already == self.num_images
 
     def test_step(
@@ -37,9 +57,25 @@ class CleanImagesStandardStrategy(TestingStrategy):
             model: BaseModel,
             transforms: _BaseTransform | None,
             batch: Dict[str, Any],
-            metrics: Metric
+            metrics: None = None
         ) -> Dict[str, Any]:
-        """Execute one testing step"""
+        """
+        Execute one testing step.
+        
+        :param model: The model to execute the testing step with
+        :type model: BaseModel
+        :param transforms: The transformations to apply
+        :type transforms: _BaseTransform | None
+        :param batch: The batch of data to test on
+        :type batch: Dict[str, Any]
+        :param metrics: The list of metrics to evaluate. For this strategy
+        this is not used, but it is passed as None for consistency, do not
+        change this.
+        :type metrics: None
+        :return: The results of the testing step
+        :rtype: Dict[str, Any]
+        """
+        del metrics
         try:
             inputs = batch["input"]
             targets = batch["target"]
@@ -73,7 +109,16 @@ class CleanImagesStandardStrategy(TestingStrategy):
         return inputs, outputs, targets
 
     def aggregate_results(self, all_results: list[tuple]) -> Dict[str, Any]:
-        """Aggregate results across all test steps"""
+        """
+        Aggregate results across all test steps. Concatenates all the tensors together
+        to get a unified representation. The output tensor is unsqueezed along the batch dimension
+        so that it conforms with the definition of the Plotter class used to do the grid plot.
+
+        :param all_results: a list of tuples containing (inputs, outputs, targets) for each test step
+        :type all_results: list[tuple]
+        :return: A dictionary containing the aggregated results
+        :rtype: Dict[str, Any]
+        """
         # Unpack all tuples and concatenate along batch dimension
         inputs_list, outputs_list, targets_list = zip(*all_results)
         
@@ -95,7 +140,16 @@ class CleanImagesStandardStrategy(TestingStrategy):
         }
 
     def finalize_test(self, aggregated_results: Dict[str, Any], verbose: bool) -> Dict[str, Any]:
-        """Final processing/reporting step"""
+        """
+        Final processing/reporting step. Plots the results using the Plotter class.
+
+        :param aggregated_results: The aggregated results from all test steps
+        :type aggregated_results: Dict[str, Any]
+        :param verbose: Whether to print verbose output
+        :type verbose: bool
+        :return: The finalized results after plotting
+        :rtype: Dict[str, Any]
+        """
         # Make sure the folder for the results exists
         os.makedirs(self.test_dir, exist_ok=True)
         
@@ -105,7 +159,7 @@ class CleanImagesStandardStrategy(TestingStrategy):
             aggregated_results["aggregated_targets"],
             aggregated_results["aggregated_outputs"],
             model_names=aggregated_results["models"],
-            filename=self.image_filename,
+            filename=self.images_filename,
             data_folder=self.test_dir,
             f_agn=self.f_agn,
             desired_pattern=self.desired_pattern,
