@@ -1,10 +1,7 @@
-import json
-import random
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
-import numpy as np
 import torch
 
 from networks.models import BaseModel
@@ -21,7 +18,6 @@ class CheckpointManager:
     and custom metadata. Supports both single and multiple optimizers, automatic
     cleanup of old checkpoints, and best model tracking.
     """
-    
     @log_execution("Initializing CheckpointManager...", "CheckpointManager initialized successfully!")
     def __init__(
         self, 
@@ -35,14 +31,18 @@ class CheckpointManager:
         """
         Initialize the CheckpointManager.
         
-        Args:
-            save_dir: Directory where checkpoints will be saved
-            keep_last_n: Number of recent checkpoints to keep (0 = keep all)
-            save_best: Whether to automatically save best models
-            checkpoint_prefix: Prefix for checkpoint filenames
-            best_model_name: Filename for the best model checkpoint
-            latest_model_name: Filename for the latest model checkpoint
-            verbose: Whether to print verbose logging information
+        :param save_dir: Directory where checkpoints will be saved
+        :type save_dir: Union[str, Path]
+        :param model_filename: Filename for the model checkpoint
+        :type model_filename: str
+        :param device: Torch device to use for saving/loading checkpoints
+        :type device: torch.device
+        :param save_best: Whether to automatically save best models
+        :type save_best: bool
+        :param best_model_suffix: Suffix for the best model checkpoint filename
+        :type best_model_suffix: str
+        :param verbose: Whether to print verbose logging information
+        :type verbose: bool
         """
         self.save_dir = Path(save_dir)
         self.model_filename = model_filename
@@ -70,6 +70,20 @@ class CheckpointManager:
         is_best: Optional[bool] = False,
         is_last: Optional[bool] = False
     ) -> None:
+        """
+        Saves a checkpoint at the specified step.
+
+        :param step: The step of the checkpoint
+        :type step: int
+        :param model: The model to save
+        :type model: BaseModel
+        :param optimizers: The optimizer(s) to save
+        :type optimizers: Union[torch.optim.Optimizer, Dict[str, torch.optim.Optimizer]]
+        :param is_best: Whether this is the best model checkpoint
+        :type is_best: bool
+        :param is_last: Whether this is the last model checkpoint
+        :type is_last: bool
+        """
         if is_best:
             model_filename = f"{self.model_filename}_{self.best_model_suffix}.pth"
             checkpoint_name = f"checkpoint_{self.best_model_suffix}.pth"
@@ -108,15 +122,13 @@ class CheckpointManager:
     ):
         """
         Load a checkpoint and return its contents.
-        
-        Args:
-            checkpoint_path: Specific checkpoint to load
-            load_best: Load the best model checkpoint
-            load_latest: Load the latest model checkpoint  
-            map_location: Device to map tensors to
-            
-        Returns:
-            Dictionary containing all checkpoint data
+
+        :param checkpoint_path: Specific checkpoint to load
+        :param load_best: Load the best model checkpoint
+        :param load_latest: Load the latest model checkpoint
+        :param map_location: Device to map tensors to
+
+        :return: Loaded checkpoint data
         """
         # Get the metadata of the last checkpoint
         last_step = self.metadata.get("last_step", 0)
@@ -145,7 +157,14 @@ class CheckpointManager:
         self, 
         optimizers: Union[torch.optim.Optimizer, List[torch.optim.Optimizer], Dict[str, torch.optim.Optimizer]]
     ) -> Dict[str, Dict]:
-        """Serialize optimizer(s) to a dictionary format."""
+        """
+        Serialize optimizer(s) to a dictionary format.
+
+        :param optimizers: The optimizer(s) to serialize
+        :type optimizers: Union[torch.optim.Optimizer, Dict[str, torch.optim.Optimizer]]
+        :return: A dictionary containing the serialized optimizer states
+        :rtype: Dict[str, Dict]
+        """
         if isinstance(optimizers, torch.optim.Optimizer):
             return {"optimizer": optimizers.state_dict()}
         elif isinstance(optimizers, dict):
@@ -158,7 +177,16 @@ class CheckpointManager:
         optimizers: Union[torch.optim.Optimizer, Dict[str, torch.optim.Optimizer]],
         optimizer_states: Dict[str, Dict]
     ) -> Union[torch.optim.Optimizer, Dict[str, torch.optim.Optimizer]]:
-        """Restore optimizer states from checkpoint data."""
+        """
+        Restore optimizer states from checkpoint data.
+
+        :param optimizers: The optimizer(s) to restore
+        :type optimizers: Union[torch.optim.Optimizer, Dict[str, torch.optim.Optimizer]]
+        :param optimizer_states: The serialized optimizer states
+        :type optimizer_states: Dict[str, Dict]
+        :return: The restored optimizer(s)
+        :rtype: Union[torch.optim.Optimizer, Dict[str, torch.optim.Optimizer]]
+        """
         if isinstance(optimizers, torch.optim.Optimizer):
             if "optimizer" in optimizer_states:
                 optimizers.load_state_dict(optimizer_states["optimizer"])
@@ -190,7 +218,9 @@ class CheckpointManager:
         save_json_file(self.metadata, metadata_path)
 
     def _load_metadata(self):
-        """Load existing checkpoint metadata."""
+        """
+        Load existing checkpoint metadata.
+        """
         metadata_path = self.save_dir / "checkpoint_metadata.json"
 
         if metadata_path.exists():

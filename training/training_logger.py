@@ -9,24 +9,17 @@ from utils.validation import validate_type
 
 class TrainingLogger:
     """
-    TrainingLogger is a class that manages the logging of training history for machine learning models.
-    It keeps track of training and validation losses, best validation loss, and optimizer states.
-    The logger can also handle adversarial losses, which are commonly used in Generative Adversarial Networks (GANs).
-    The training history is saved to a JSON file, and the optimizer states are saved to .pth files.
-    The logger is initialized with a directory where the training history will be saved.
-    It also provides methods to retrieve the optimizer states for resuming training.
+    TrainingLogger manages logging of training and validation metrics, including losses and best validation loss.
+    It saves histories to JSON files and supports resuming training from saved states.
     """
     @log_execution("Initializing TrainingLogger...", "TrainingLogger initialized successfully!")
     def __init__(self, save_dir, verbose: bool = False):
         """
-        Initializes the TrainingLogger. This class is responsible for logging the training history,
-        including training and validation losses, best validation loss, and optimizer states.
-        Once a logger is initialized, it will load the existing training history from the specified directory.
-        If the history file does not exist, it will create a new one.
+        Initializes TrainingLogger, loading or creating training history in the given directory.
 
-        :param save_dir: Directory where the training history will be saved.
+        :param save_dir: Directory to save training history.
         :type save_dir: str
-        :param verbose: Whether to print verbose logging information.
+        :param verbose: Enable verbose logging.
         :type verbose: bool
         """
         self.verbose = verbose

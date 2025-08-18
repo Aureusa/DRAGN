@@ -10,13 +10,21 @@ from utils.building import build_loaders, build_model, build_transform
 from utils.device import get_device, move_batch_to_device
 from utils.log_utils import log_execution
 
+from .loss_functions import Loss
 from .checkpoint_manager import CheckpointManager
 from .training_logger import TrainingLogger
 
 
 class UniversalTrainer:
+    """Universal trainer that uses configuration-driven training strategies"""
     @log_execution("Configuring Trainer...", "Trainer configured successfully!")
-    def __init__(self, config: ExperimentConfig):
+    def __init__(self, config: ExperimentConfig) -> None:
+        """
+        Initialize the UniversalTrainer with the given configuration.
+
+        :param config: Experiment configuration object.
+        :type config: ExperimentConfig
+        """
         self.config = config
 
         # DEPRECATED: Get device; should be handled by the config file in the future
@@ -72,7 +80,9 @@ class UniversalTrainer:
         print_box(str(config))
 
     def train_epoch(self) -> Dict[str, float]:
-        """Train one epoch using the model's strategy"""
+        """
+        Train one epoch using the model's strategy
+        """
         self.model.train()
         epoch_metrics = {}
         
@@ -110,7 +120,9 @@ class UniversalTrainer:
         return {key: np.mean(values) for key, values in epoch_metrics.items()}
     
     def validate_epoch(self) -> Dict[str, float]:
-        """Validate one epoch using the model's strategy"""
+        """
+        Validate one epoch using the model's strategy
+        """
         self.model.eval()
         epoch_metrics = {}
         
@@ -133,7 +145,9 @@ class UniversalTrainer:
         return {key: np.mean(values) for key, values in epoch_metrics.items()}
     
     def train(self):
-        """Main training loop - works for any model type"""
+        """
+        Main training loop. Trains the model for a specified number of epochs.
+        """
         best_val_loss = self.logger.get_best_val_loss()
         
         for epoch in range(self.num_epochs):
@@ -166,8 +180,13 @@ class UniversalTrainer:
             is_last=True
         )
         
-    def _build_loss(self):
-        """Build the loss function based on the configuration"""
+    def _build_loss(self) -> Loss:
+        """
+        Build the loss function based on the configuration
+
+        :return: The loss function
+        :rtype: Loss
+        """
         loss_fn_config = self.config.loss_fn_config
         loss_fn_name = loss_fn_config.loss
         loss_fn_params = loss_fn_config.params or {}
@@ -179,7 +198,14 @@ class UniversalTrainer:
         return loss_fn_class.from_config(loss_fn_params)
 
     def _get_primary_val_loss(self, val_metrics: Dict[str, float]) -> float:
-        """Get the primary validation loss based on model type"""
+        """
+        Get the primary validation loss based on model type
+
+        :param val_metrics: Dictionary containing validation metrics
+        :type val_metrics: Dict[str, float]
+        :return: The primary validation loss
+        :rtype: float
+        """
         if "val_loss" in val_metrics:
             return val_metrics["val_loss"]
         if "val_loss_G" in val_metrics:
