@@ -5,7 +5,7 @@ T = TypeVar('T')
 
 class Component(ABC):
     """
-    Base class for all configurable components in DRAGN
+    Base class for all configurable components.
     """
     @classmethod
     @abstractmethod
