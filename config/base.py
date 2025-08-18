@@ -1,27 +1,55 @@
-from pydantic import BaseModel
-from pathlib import Path
-import yaml
 import json
-from typing import Any, Union, get_origin, get_args
+from pathlib import Path
+from typing import Any, Union, get_args, get_origin
+
+import yaml
+from pydantic import BaseModel
 
 
 class ConfigBase(BaseModel):
+    """
+    The base class for all configs.
+    """
     @classmethod
-    def from_yaml(cls, file_path: str):
-        """Load config from YAML file"""
+    def from_yaml(cls, file_path: str) -> 'ConfigBase':
+        """
+        Load config from YAML file
+
+        :param file_path: the path to the yaml config file.
+        :type file_path: str
+        :return: an instance of the config class
+        :rtype: ConfigBase
+        """
         return load_config(Path(file_path), cls)
-    
-    @classmethod 
-    def from_json(cls, file_path: str):
-        """Load config from JSON file"""
+
+    @classmethod
+    def from_json(cls, file_path: str) -> 'ConfigBase':
+        """
+        Load config from JSON file
+
+        :param file_path: the path to the json config file.
+        :type file_path: str
+        :return: an instance of the config class
+        :rtype: ConfigBase
+        """
         return load_config(Path(file_path), cls)
     
     def to_yaml(self, file_path: str):
-        """Save config to YAML file"""
+        """
+        Save config to YAML file
+
+        :param file_path: the path to the yaml config file.
+        :type file_path: str
+        """
         save_config(self, Path(file_path))
     
     def to_json(self, file_path: str):
-        """Save config to JSON file"""
+        """
+        Save config to JSON file
+
+        :param file_path: the path to the json config file.
+        :type file_path: str
+        """
         save_config(self, Path(file_path))
     
     @classmethod
@@ -29,9 +57,10 @@ class ConfigBase(BaseModel):
         """
         Generate an example YAML configuration file with default values and comments.
         
-        Args:
-            file_path: Path where to save the example YAML file
-            include_optional: Whether to include optional fields with their default values
+        :param file_path: Path where to save the example YAML file
+        :type file_path: str
+        :param include_optional: Whether to include optional fields with their default values
+        :type include_optional: bool
         """
         yaml_content = cls._generate_yaml_content(cls, include_optional=include_optional)
         
@@ -44,6 +73,13 @@ class ConfigBase(BaseModel):
     def _generate_yaml_content(cls, config_class: type, indent: int = 0, include_optional: bool = True) -> str:
         """
         Recursively generate YAML content for a configuration class.
+
+        :param config_class: The configuration class to generate YAML for
+        :type config_class: type
+        :param indent: The current indentation level
+        :type indent: int
+        :param include_optional: Whether to include optional fields
+        :type include_optional: bool
         """
         lines = []
         indent_str = "  " * indent
@@ -116,8 +152,16 @@ class ConfigBase(BaseModel):
     
     @staticmethod
     def _get_example_value(field_type: type, field_name: str) -> str:
-        """Generate example values for optional fields based on type and name."""
-        
+        """
+        Generate example values for optional fields based on type and name.
+
+        :param field_type: The type of the field
+        :type field_type: type
+        :param field_name: The name of the field
+        :type field_name: str
+        :return: An example value as a string
+        :rtype: str
+        """
         # Handle Union types (like Optional)
         origin = get_origin(field_type)
         if origin is Union:
@@ -165,7 +209,14 @@ class ConfigBase(BaseModel):
     
     @staticmethod
     def _format_yaml_value(value: Any) -> str:
-        """Format a Python value for YAML output."""
+        """
+        Format a Python value for YAML output.
+
+        :param value: The Python value to format
+        :type value: Any
+        :return: The formatted YAML string
+        :rtype: str
+        """
         if isinstance(value, str):
             return f'"{value}"'
         elif isinstance(value, bool):
@@ -185,7 +236,16 @@ class ConfigBase(BaseModel):
     
 
 def load_config(config_path: Path, config_class: type[BaseModel]) -> BaseModel:
-    """Load and validate configuration from file"""
+    """
+    Load and validate configuration from file
+
+    :param config_path: The path to the configuration file
+    :type config_path: Path
+    :param config_class: The configuration class to validate against
+    :type config_class: type[BaseModel]
+    :return: The validated configuration instance
+    :rtype: BaseModel
+    """
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
     
@@ -200,8 +260,15 @@ def load_config(config_path: Path, config_class: type[BaseModel]) -> BaseModel:
     return config_class(**data)
 
 
-def save_config(config: BaseModel, config_path: Path):
-    """Save configuration to file"""
+def save_config(config: BaseModel, config_path: Path) -> None:
+    """
+    Save configuration to file
+    
+    :param config: the configuration to save
+    :type config: BaseModel
+    :param config_path: The path to the configuration file
+    :type config_path: Path
+    """
     config_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(config_path, 'w') as f:
@@ -213,7 +280,15 @@ def save_config(config: BaseModel, config_path: Path):
             raise ValueError(f"Unsupported config format: {config_path.suffix}")
 
 
-def create_example_config_yaml(config_type: ConfigBase, file_path: str = "example_config.yaml"):
+def create_example_config_yaml(config_type: ConfigBase, file_path: str = "example_config.yaml") -> None:
+    """
+    Factory function for generating example configuration YAML files.
+
+    :param config_type: The configuration class to generate an example for
+    :type config_type: ConfigBase
+    :param file_path: The path to the output YAML file
+    :type file_path: str
+    """
     config_type.generate_example_yaml(file_path, include_optional=True)
     print(f"Example configuration saved to {file_path}")
     print("Please edit the required fields marked with '# REQUIRED' before using.")

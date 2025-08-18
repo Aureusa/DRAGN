@@ -1,5 +1,5 @@
 from pydantic import Field
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional
 from pathlib import Path
 
 from .base import ConfigBase
@@ -7,6 +7,20 @@ from .common import ModelConfig, DataConfig, TransformConfig, MetricsConfig
 
 
 class TestingConfig(ConfigBase):
+    """
+    Configuration for the testing a model.
+
+    :param model_filename: Filename of the model to be tested (without .pth extension)
+    :type model_filename: str
+    :param data_folder: The folder where the model and its data is stored
+    :type data_folder: str
+    :param testing_strategy: The strategy to use for testing. Must be in 'TESTING_STRATEGY_REGISTRY'
+    :type testing_strategy: str
+    :param testing_strategy_params: Additional parameters for the testing strategy
+    :type testing_strategy_params: Optional[Dict[str, Any]]
+    :param verbose: Whether to print verbose output
+    :type verbose: bool
+    """
     model_filename: str = Field(..., description="Filename of the model to be tested (without .pth extension)")
     data_folder: str = Field(..., description="The folder where the model and its data is stored")
     testing_strategy: str = Field(..., description="The strategy to use for testing")
@@ -15,6 +29,21 @@ class TestingConfig(ConfigBase):
 
 
 class TestExperimentConfig(ConfigBase):
+    """
+    A hierarchical configuration class for organizing testing settings.
+    This is the main configuration class for testing experiments.
+
+    Structure:
+        - testing_config (TestingConfig): General testing parameters (e.g., model filename, data folder).
+        - model_settings_config (ModelConfig): Model architecture and related settings.
+        - test_data_config (DataConfig): Testing dataset configuration.
+        - transform_config (Optional[TransformConfig]): Data transformation configuration (optional).
+        - metrics_config (Optional[MetricsConfig]): Metrics configuration (optional).
+    Properties:
+        - experiment_dir (Path): Path to the experiment directory, derived from training_config.
+    Methods:
+        - __str__: Returns a formatted string summarizing the experiment configuration.
+    """
     testing_config: TestingConfig
     model_settings_config: ModelConfig
     test_data_config: DataConfig
